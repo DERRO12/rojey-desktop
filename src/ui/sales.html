@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rojey POS - Sales</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; style-src 'self' 'unsafe-inline' file:; font-src 'self' file: data:; script-src 'self' file:; img-src 'self' file: data:">
+  <link rel="stylesheet" href="web/assets/POS/css/lib/font_awesomeV5P/css/pro.min.css">
+  <link rel="stylesheet" href="rojey.css">
+</head>
+<body class="rj-page">
+<div class="rj-top"><h2>Sales on this computer</h2><div><button class="rj-btn rj-blue" id="sync" type="button">Sync now</button> <button class="rj-btn rj-primary" id="back" type="button">Back to POS (F2)</button></div></div>
+<div class="rj-main">
+  <div class="rj-card rj-section">
+    <div class="rj-row">
+      <label class="rj-field">From date <input type="date" id="fd"></label>
+      <label class="rj-field">From time (24h) <input type="text" id="ft" placeholder="00:00" maxlength="5" style="width:90px"></label>
+      <label class="rj-field">To date <input type="date" id="td"></label>
+      <label class="rj-field">To time (24h) <input type="text" id="tt" placeholder="23:59" maxlength="5" style="width:90px"></label>
+      <label class="rj-field">Status <select id="st"><option value="">All</option><option value="pending">Waiting to upload</option><option value="synced">Uploaded</option><option value="running">Running (not paid)</option></select></label>
+      <button class="rj-btn rj-blue" id="go" type="button">Show</button>
+      <button class="rj-btn rj-grey" id="today" type="button">Today</button>
+      <button class="rj-btn rj-grey" id="last24" type="button">Last 24 hours</button>
+      <button class="rj-btn rj-grey" id="all" type="button">All</button>
+    </div>
+    <div class="rj-totals" id="totals"></div>
+    <div id="netline" class="rj-hint"></div>
+  </div>
+  <div class="rj-card"><table class="rj-table" id="tbl"></table></div>
+</div>
+<script src="calc.js"></script>
+<script src="common.js"></script>
+<script src="sales.js"></script>
+</body>
+</html>

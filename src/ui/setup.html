@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rojey POS - Settings</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; style-src 'self' 'unsafe-inline' file:; font-src 'self' file: data:; script-src 'self' file:; img-src 'self' file: data:">
+  <link rel="stylesheet" href="web/assets/POS/css/lib/font_awesomeV5P/css/pro.min.css">
+  <link rel="stylesheet" href="rojey.css">
+</head>
+<body class="rj-page">
+<div class="rj-top"><h2>Rojey POS · Settings</h2><div><button class="rj-btn rj-grey" id="back" type="button">Back</button> <button class="rj-btn rj-primary" id="save" type="button">Save</button></div></div>
+<div class="rj-main">
+  <div class="rj-card rj-section">
+    <h3>1. Website</h3>
+    <div class="rj-row">
+      <label class="rj-field" style="flex:1">Your POS website address <input type="text" id="baseUrl" placeholder="pos.rojeycreamery.com"></label>
+      <button class="rj-btn rj-blue" id="check" type="button">Check</button>
+    </div>
+    <div id="siteMsg" class="rj-hint"></div>
+    <div id="pendingMsg" class="rj-hint"></div>
+    <p class="rj-hint">If the address changes, type the new one here. Orders waiting on this computer are kept and upload to the new address. Menus, tables and users download from it the next time someone signs in with internet.</p>
+  </div>
+
+  <div class="rj-card rj-section">
+    <h3>2. Printers</h3>
+    <p class="rj-hint">Each kitchen on the website (for example <b>Kitchen</b> and <b>Cafe</b>) gets its own KOT printer. The moment an order is placed, each item prints at its own kitchen. Bills and receipts print at the <b>cashier</b>.</p>
+    <div class="rj-printer-box rj-printer-cashier">
+      <div class="rj-printer-title"><i class="fas fa-cash-register"></i> Cashier: receipts and bills</div>
+      <div class="rj-row">
+        <label class="rj-field" style="flex:1">Receipt printer <select id="receiptPrinter"></select></label>
+        <button class="rj-btn rj-grey" type="button" data-test="receiptPrinter">Test print</button>
+      </div>
+    </div>
+    <div id="kitchens"></div>
+    <div class="rj-printer-box">
+      <div class="rj-printer-title"><i class="fas fa-print"></i> Any other kitchen (default KOT printer)</div>
+      <div class="rj-row">
+        <label class="rj-field" style="flex:1">Used for a kitchen that has no printer chosen above <select id="kitchenPrinter"></select></label>
+        <button class="rj-btn rj-grey" type="button" data-test="kitchenPrinter">Test print</button>
+      </div>
+    </div>
+    <div class="rj-print-map" id="printMap"></div>
+    <div class="rj-row">
+      <label class="rj-field">Paper width <select id="paperWidth"><option value="80">80 mm</option><option value="58">58 mm</option></select></label>
+      <label class="rj-field">KOT copies <input type="number" id="kotCopies" min="1" max="5" style="width:90px"></label>
+      <label class="rj-field">Receipt copies <input type="number" id="receiptCopies" min="1" max="5" style="width:90px"></label>
+      <label class="rj-field"><input type="checkbox" id="autoPrintReceipt" style="display:inline;width:auto"> Print the receipt when a sale is paid</label>
+    </div>
+  </div>
+
+  <div class="rj-card rj-section">
+    <h3>3. Taxes</h3>
+    <label class="rj-field"><input type="checkbox" id="taxesOn" style="display:inline;width:auto"> Add taxes (VAT) to sales</label>
+    <p class="rj-hint">Off unless an admin turns it on. When an admin switches taxes on or off on the website, this till follows by itself.</p>
+
+    <h3>4. Updates</h3>
+    <label class="rj-field"><input type="checkbox" id="autoUpdate" style="display:inline;width:auto"> Download new versions by themselves</label>
+    <p class="rj-hint" id="updMsg">New versions come from GitHub. An admin installs them with the update button at the top of the POS screen.</p>
+
+    <h3>5. Other</h3>
+    <div class="rj-row">
+      <label class="rj-field">Keep uploaded orders on this computer for (days) <input type="number" id="keepSyncedDays" min="0" max="60" style="width:120px"></label>
+      <label class="rj-field">Counter id on the website (optional) <input type="text" id="counterId" style="width:120px"></label>
+    </div>
+    <label class="rj-field"><input type="checkbox" id="autoOpenRegister" style="display:inline;width:auto"> Open the register on the website by itself (opening balance 0) when it is closed</label>
+    <label class="rj-field"><input type="checkbox" id="startFullscreen" style="display:inline;width:auto"> Start in full screen</label>
+    <p class="rj-hint">Orders that are still waiting to upload are never deleted. Only orders the website has confirmed are removed after the days above.</p>
+    <p><a href="#" id="logs">Open the data folder (database and log)</a></p>
+  </div>
+</div>
+<script src="common.js"></script>
+<div class="rj-credit rj-credit-dark">Designed by <b>Derrick Mugooba</b> &middot; Mauzo Books &middot; <b>0755933629</b></div>
+<script src="setup.js"></script>
+</body>
+</html>

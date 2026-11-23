@@ -1,0 +1,28 @@
+{
+  "name": "rojey-pos",
+  "productName": "Rojey POS",
+  "version": "2.5.0",
+  "description": "Rojey POS: standalone offline-first till that syncs with the Rojey (iRestora PLUS) website",
+  "main": "src/main.js",
+  "author": "Rojey Creamery",
+  "license": "UNLICENSED",
+  "private": true,
+  "repository": { "type": "git", "url": "https://github.com/DERRO12/rojey-desktop.git" },
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/e2e.js",
+    "dist": "electron-builder --win portable --x64 && sh installer/build-installer.sh"
+  },
+  "devDependencies": {
+    "electron": "37.10.3",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.rojeycreamery.pos",
+    "productName": "Rojey POS",
+    "files": ["src/**/*", "package.json"],
+    "directories": { "output": "dist" },
+    "win": { "target": ["portable"], "signAndEditExecutable": false, "icon": "build/icon.ico" },
+    "portable": { "artifactName": "RojeyPOS-Portable-${version}.${ext}" }
+  }
+}

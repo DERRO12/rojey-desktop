@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rojey POS</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data:; img-src 'self' file: data: https: http:; style-src 'self' 'unsafe-inline' file:; font-src 'self' file: data:; script-src 'self' file:">
+  <link rel="stylesheet" href="web/assets/POS/css/style.css">
+  <link rel="stylesheet" href="web/assets/POS/css/style2.css">
+  <link rel="stylesheet" href="web/assets/POS/css/customModal.css">
+  <link rel="stylesheet" href="web/assets/POS/css/lib/font_awesomeV5P/css/pro.min.css">
+  <link rel="stylesheet" href="web/assets/dist/css/common.css">
+  <link rel="stylesheet" href="web/frequent_changing/css/custom_css.css">
+  <link rel="stylesheet" href="web/assets/POS/css/custom_pos.css">
+  <link rel="stylesheet" href="web/frequent_changing/table_design/custom_card_design_zak.css">
+  <link rel="stylesheet" href="rojey.css">
+</head>
+<body class="rj-pos">
+<div id="main-wrapper-content" class="wrapper">
+  <div class="top_header_part">
+    <div class="left_item">
+      <div class="header_part_middle">
+        <ul class="icon__menu">
+          <li><a href="#" id="rj_logout" class="header_menu_icon" title="Sign out"><i class="fas fa-sign-out-alt"></i></a></li>
+          <li class="rj-admin"><a href="#" id="rj_sales" class="header_menu_icon" title="Sales on this computer (F3)"><i class="fal fa-list-alt"></i></a></li>
+          <li class="rj-admin"><a href="#" id="rj_update" class="header_menu_icon" title="Updates"><i class="fal fa-arrow-circle-up"></i><span class="rj-update-dot" id="rj_update_dot"></span></a></li>
+          <li class="rj-admin"><a href="#" id="rj_settings" class="header_menu_icon" title="Settings"><i class="fal fa-cog"></i></a></li>
+          <li><a href="#" id="print_last_invoice" class="header_menu_icon" title="Print last invoice (F8)"><i class="fal fa-print"></i></a></li>
+          <li><a href="#" id="rj_refresh" class="header_menu_icon" title="Download menu and users from the website"><i class="fal fa-cloud-download"></i></a></li>
+          <li><a href="#" id="rj_fullscreen" class="header_menu_icon fullscreen" title="Full screen (F11)"><i class="fal fa-expand-arrows-alt"></i></a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="header_part_right">
+      <ul class="btn__menu btn__menu_left">
+        <li><div class="pos_outlet_info irestora_font_div_pos" id="rj_outlet"></div></li>
+      </ul>
+      <ul class="btn__menu">
+        <li><a href="#" id="pull_running_order" title="Get running orders from other tills" class="header_menu_icon bg__red"><i class="fas fa-exchange-alt"></i></a></li>
+        <li><a href="#" id="sync_online" title="Upload now" class="header_menu_icon bg__green"><i class="fas fa-sync"></i></a></li>
+        <li><a href="#" id="online_status" class="bg__green"><span class="online_status_counter" id="rj_pending"></span> <span class="online_status_text" id="rj_online_text">Online</span></a></li>
+        <li><a href="#" data-status="veg" class="veg_bev_item bg__green">Vegetarian Items</a></li>
+        <li><a href="#" data-status="bev" class="veg_bev_item bg__grey">Beverage Items</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="main_part">
+    <div class="left_item">
+      <div class="main_left">
+        <div class="holder">
+          <div id="running_order_header">
+            <h3>Running Orders</h3>
+            <span id="refresh_order" title="Refresh"><i class="fas fa-sync-alt"></i></span>
+            <div class="rj-order-search"><i class="fas fa-search"></i>
+              <input type="search" id="search_running_orders" autocomplete="off" placeholder="Search orders (F4)" title="Order number, table, waiter or customer">
+              <button type="button" id="rj_clear_order_search" title="Clear search"><i class="fas fa-times"></i></button></div>
+            <div class="rj-order-count" id="rj_order_count"></div>
+          </div>
+          <div class="order_details scrollbar-macosx" id="order_details_holder"></div>
+          <div id="left_side_button_holder_absolute">
+            <button class="operation_button" id="modify_order"><i class="fas fa-edit"></i> Modify Order</button>
+            <button class="operation_button fix" id="single_order_details"><i class="fas fa-info-circle"></i> Order Details</button>
+            <div class="ir_flex_jc_w94_pr">
+              <button class="operation_button fix print_kot_button" id="rj_kot"><i class="fas fa-print"></i> KOT</button>
+            </div>
+            <div class="ir_flex_jc_w94_pr margin_top_5">
+              <button class="ir_calc_w98 operation_button fix" id="create_invoice_and_close">Invoice</button>
+              <button class="operation_button fix ir_calc_w98_m5" id="create_bill_and_close">Bill</button>
+            </div>
+            <button class="operation_button fix" id="cancel_order_button"><i class="fas fa-ban"></i> Cancel Order</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="main_middle">
+        <div class="main_top">
+          <div class="button_holder">
+            <button class="selected__btn_c dine_in_button" data-type="1" data-selected="unselected"><i class="fal fa-table"></i> Dine In</button>
+            <button class="selected__btn_c take_away_button" data-type="2" data-selected="unselected"><i class="fal fa-shopping-bag"></i> Take Away</button>
+            <button class="selected__btn_c delivery_button" data-type="3" data-selected="unselected"><i class="fal fa-truck"></i> Delivery</button>
+            <button class="table_button" id="rj_table_btn"><i class="fal fa-table"></i> <span>Table</span></button>
+          </div>
+        </div>
+        <div class="waiter_customer">
+          <div class="left_item">
+            <select id="select_waiter" class="select_waiter ir_w92_ml"><option value="">Waiter</option></select>
+            <select id="walk_in_customer" class="select_walk_in_customer_custom"><option value="">Customer</option></select>
+          </div>
+          <div class="separator">
+            <a href="#" class="header_menu_icon" id="rj_order_options" title="Discount, charge and tips"><i class="far fa-percentage"></i></a>
+          </div>
+        </div>
+        <div class="main_center">
+          <div class="order_table_holder">
+            <div class="order_table_header_row">
+              <div class="single_header_column" id="single_order_item">Item</div>
+              <div class="single_header_column" id="single_order_price">Price</div>
+              <div class="single_header_column" id="single_order_qty">Qty</div>
+              <div class="single_header_column" id="single_order_discount">Discount</div>
+              <div class="single_header_column" id="single_order_total">Total</div>
+            </div>
+            <div class="order_holder cardIsEmpty" id="rj_cart"></div>
+          </div>
+        </div>
+        <div id="bottom_absolute">
+          <div class="bottom__info">
+            <div class="rj-summary" id="rj_summary"></div>
+            <div class="payable">
+              <h1><i id="cart_item_option_open" class="fal fa-eye" title="Show totals"></i> Total Payable:
+                <span class="color_div mrgin_3" id="total_payable">0.00</span></h1>
+            </div>
+            <div class="main_bottom">
+              <div class="button_group">
+                <button id="cancel_button"><i class="fas fa-times"></i> Cancel</button>
+                <button id="rj_bill_now" title="Print a bill for the customer"><i class="fas fa-file-invoice"></i> Bill</button>
+                <button data-type="1" id="direct_invoice" class="place_order_operation"><i class="fas fa-utensils"></i> <span>Direct Invoice</span></button>
+                <button data-type="2" id="place_order" class="placeOrderSound place_order_operation"><i class="fas fa-utensils"></i> <span id="place_edit_order">Place Order</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main_right">
+      <form autocomplete="off" class="search-category-form" id="search_form">
+        <input class="ir_w_m_b_4" type="text" name="search" id="search" placeholder="Name or Code or Category or Veg or Beverage or Bar">
+      </form>
+      <div id="main_item_holder">
+        <div class="category-list scrollbar-macosx">
+          <ul class="list-of-item" id="rj_categories"></ul>
+        </div>
+        <div id="secondary_item_holder">
+          <div class="category_items" id="rj_items"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="rj_modal_root"></div>
+<div id="rj_toasts"></div>
+<script src="calc.js"></script>
+<script src="common.js"></script>
+<script src="pos.js"></script>
+</body>
+</html>

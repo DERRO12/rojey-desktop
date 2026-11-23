@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Rojey POS setup</title>
+<style>
+  :root { --brand:#7367f0; --ok:#1e9e5a; --bad:#d64545; --line:#e3e5ea; --muted:#6b7280; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI", system-ui, sans-serif; background:#f5f6fa; color:#1f2430; font-size:14px; }
+  header { background:var(--brand); color:#fff; padding:18px 28px; }
+  header h1 { margin:0; font-size:20px; font-weight:600; }
+  header p { margin:4px 0 0; opacity:.9; }
+  main { padding:20px 28px 90px; }
+  section { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 4px; }
+  .hint { color:var(--muted); margin:0 0 12px; font-size:13px; }
+  label { display:block; font-weight:600; margin:12px 0 6px; }
+  input[type=text], select { width:100%; padding:10px 12px; border:1px solid #cfd3dc; border-radius:7px; font-size:14px; background:#fff; }
+  .row { display:flex; gap:10px; align-items:center; }
+  .row > *:first-child { flex:1; }
+  button { padding:10px 16px; border-radius:7px; border:1px solid #cfd3dc; background:#fff; cursor:pointer; font-size:14px; white-space:nowrap; }
+  button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
+  button:disabled { opacity:.6; cursor:default; }
+  .msg { margin-top:8px; font-size:13px; min-height:18px; }
+  .msg.ok { color:var(--ok); } .msg.bad { color:var(--bad); }
+  .check { display:flex; gap:10px; align-items:flex-start; margin:10px 0; font-weight:400; }
+  .check input { margin-top:3px; }
+  .kitchen-row { display:flex; gap:8px; margin-top:8px; }
+  .kitchen-row input { flex:1; } .kitchen-row select { flex:1.4; }
+  footer { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); padding:12px 28px; display:flex; justify-content:space-between; align-items:center; }
+  .warn { background:#fff6e5; border:1px solid #f3c56b; padding:10px 12px; border-radius:7px; margin-top:10px; display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rojey POS setup</h1>
+  <p>Type your POS website and choose your printers. You can come back here any time from the menu (Ctrl + ,).</p>
+</header>
+<main>
+  <section>
+    <h2>1. Your POS website</h2>
+    <p class="hint">The address you open in the browser, for example <b>pos.rojeycreamery.com</b>. If you move the POS to a new domain, change it here.</p>
+    <div class="row">
+      <input id="site" type="text" placeholder="pos.rojeycreamery.com" autocomplete="off" spellcheck="false">
+      <button id="testSite">Check</button>
+    </div>
+    <div id="siteMsg" class="msg"></div>
+    <div id="pendingWarn" class="warn"></div>
+  </section>
+
+  <section>
+    <h2>2. Printers</h2>
+    <p class="hint">Receipts go to the receipt printer. Kitchen tickets (KOT) go to the kitchen printer. Leave a printer on "Ask every time" to get the normal print window.</p>
+    <label for="receipt">Receipt printer</label>
+    <div class="row"><select id="receipt"></select><button data-test="receipt">Test print</button></div>
+    <label for="kitchen">Kitchen ticket printer</label>
+    <div class="row"><select id="kitchen"></select><button data-test="kitchen">Test print</button></div>
+    <div id="printMsg" class="msg"></div>
+
+    <label class="check"><input id="oneTapKot" type="checkbox"> <span><b>One-tap KOT when offline</b>: pressing KOT prints the kitchen ticket straight away, without the extra options (online stays as it is)</span></label>
+    <label for="kotItems">One-tap KOT prints</label>
+    <select id="kotItems">
+      <option value="new">Only new items (not yet sent to the kitchen)</option>
+      <option value="all">All items in the order</option>
+    </select>
+
+    <label>Separate printer for a particular kitchen (optional)</label>
+    <p class="hint">Type the kitchen name exactly as it shows on the ticket (for example <b>Bar</b>), then pick its printer.</p>
+    <div id="kitchens"></div>
+    <button id="addKitchen" style="margin-top:8px">+ Add kitchen</button>
+  </section>
+
+  <section>
+    <h2>3. Options</h2>
+    <label class="check"><input id="autoPrint" type="checkbox"> <span>Print straight away, without showing the print window</span></label>
+    <label class="check"><input id="rememberLogin" type="checkbox"> <span>Sign back in automatically when the website session runs out, so waiting orders keep uploading</span></label>
+    <label class="check"><input id="startFullscreen" type="checkbox"> <span>Start in full screen</span></label>
+  </section>
+</main>
+<footer>
+  <span id="ver" class="hint" style="margin:0"></span>
+  <button id="save" class="primary">Save and open POS</button>
+</footer>
+<script src="setup.js"></script>
+</body>
+</html>

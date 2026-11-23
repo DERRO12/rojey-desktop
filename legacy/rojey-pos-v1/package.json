@@ -1,0 +1,49 @@
+{
+  "name": "rojey-pos-desktop",
+  "productName": "Rojey POS",
+  "version": "1.3.0",
+  "description": "Offline-first desktop shell for the Rojey (iRestora PLUS) web POS",
+  "main": "src/main.js",
+  "author": "Rojey Creamery",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/rules.test.js",
+    "dist": "electron-builder --win portable --x64 && sh installer/build-installer.sh"
+  },
+  "devDependencies": {
+    "electron": "37.10.3",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.rojeycreamery.pos",
+    "productName": "Rojey POS",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false,
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Rojey POS",
+      "artifactName": "RojeyPOS-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "RojeyPOS-Portable-${version}.${ext}"
+    }
+  }
+}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rojey POS - Sign in</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; style-src 'self' 'unsafe-inline' file:; font-src 'self' file: data:; script-src 'self' file:; img-src 'self' file: data:">
+  <link rel="stylesheet" href="web/assets/POS/css/lib/font_awesomeV5P/css/pro.min.css">
+  <link rel="stylesheet" href="rojey.css">
+</head>
+<body class="rj-page">
+<div class="rj-login-wrap">
+  <div class="rj-card rj-login">
+    <h1>Rojey POS</h1>
+    <div class="rj-sub" id="outlet">Sign in</div>
+    <div class="rj-tabs">
+      <button type="button" id="tab_pass" class="rj-on">Email &amp; Password</button>
+      <button type="button" id="tab_pin">PIN</button>
+    </div>
+    <form id="f_pass" autocomplete="off">
+      <label class="rj-field">Email <input type="text" id="email" autocomplete="username"></label>
+      <label class="rj-field">Password <input type="password" id="password" autocomplete="current-password"></label>
+      <button class="rj-btn rj-primary rj-full" type="submit" id="go_pass">Sign in</button>
+    </form>
+    <form id="f_pin" autocomplete="off" style="display:none">
+      <label class="rj-field">PIN <input type="password" id="pin" maxlength="4" inputmode="numeric"></label>
+      <div class="rj-pinpad" id="pinpad"></div>
+      <button class="rj-btn rj-primary rj-full" type="submit" id="go_pin" style="margin-top:8px">Sign in</button>
+    </form>
+    <div class="rj-error" id="err"></div>
+    <div class="rj-status-line"><span><span class="rj-dot" id="dot"></span><span id="net">Checking connection…</span></span><span id="pending"></span></div>
+    <div class="rj-status-line"><a href="#" id="settings">Settings</a><a href="#" id="quit">Close app</a></div>
+  </div>
+  <div class="rj-credit">Designed by <b>Derrick Mugooba</b> &middot; Mauzo Books &middot; <b>0755933629</b></div>
+</div>
+<script src="common.js"></script>
+<script src="login.js"></script>
+</body>
+</html>
