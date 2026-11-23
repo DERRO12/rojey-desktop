@@ -16,7 +16,8 @@ const DEFAULTS = {
   autoOpenRegister: true,  // open the register on the website by itself when an upload needs it
   counterId: '',
   startFullscreen: false,
-  taxesOn: false,          // taxes (VAT) are added only when an admin turns them on here or on the website
+  taxesOn: false,
+  taxNames: [],            // which taxes (VAT, CGST, SGST…) an admin ticked; any tax not ticked is never added or shown          // taxes (VAT) are added only when an admin turns them on here or on the website
   autoUpdate: true,        // download new versions from GitHub by themselves; an admin installs them
   updateRepo: 'DERRO12/rojey-desktop',
   zoomLevel: null,         // screen size, changed with Ctrl + / Ctrl - (null: chosen from the screen size)

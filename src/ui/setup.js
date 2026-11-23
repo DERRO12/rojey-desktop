@@ -21,6 +21,11 @@
     $('#autoOpenRegister').checked = c.autoOpenRegister !== false;
     $('#startFullscreen').checked = !!c.startFullscreen;
     $('#taxesOn').checked = !!c.taxesOn;
+    const on = new Set((c.taxNames || []).map((n) => String(n).toLowerCase()));
+    const names = [...new Set([...(data.taxNames || []), ...(c.taxNames || [])])];
+    $('#taxList').innerHTML = names.length
+      ? '<p class="rj-hint" style="margin:6px 0 2px">Taxes to add and show on the bill:</p>' + names.map((n) => `<label class="rj-field" style="margin-left:22px"><input type="checkbox" data-tax="${esc(n)}" ${on.has(n.toLowerCase()) ? 'checked' : ''} style="display:inline;width:auto"> ${esc(n)}</label>`).join('')
+      : '';
     $('#autoUpdate').checked = c.autoUpdate !== false;
     api.call('update:state').then((u) => { if (u && u.current) $('#updMsg').textContent = `This is version ${u.current}.` + (u.status === 'ready' ? ` Version ${u.version} is downloaded and ready: install it with the update button at the top of the POS screen.` : ' New versions come from GitHub and download by themselves; an admin installs them with the update button at the top of the POS screen.'); });
     $('#pendingMsg').textContent = data.pending ? data.pending + ' order(s) are waiting to upload. They are kept if you change the address.' : '';
@@ -74,7 +79,7 @@
       baseUrl: $('#baseUrl').value.trim(), receiptPrinter: $('#receiptPrinter').value, kitchenPrinter: $('#kitchenPrinter').value, kitchenPrinters: kp,
       paperWidth: $('#paperWidth').value, kotCopies: Math.max(1, Number($('#kotCopies').value) || 1), receiptCopies: Math.max(1, Number($('#receiptCopies').value) || 1),
       autoPrintReceipt: $('#autoPrintReceipt').checked, keepSyncedDays: Number($('#keepSyncedDays').value), counterId: $('#counterId').value.trim(),
-      autoOpenRegister: $('#autoOpenRegister').checked, startFullscreen: $('#startFullscreen').checked, taxesOn: $('#taxesOn').checked, autoUpdate: $('#autoUpdate').checked,
+      autoOpenRegister: $('#autoOpenRegister').checked, startFullscreen: $('#startFullscreen').checked, taxesOn: $('#taxesOn').checked, taxNames: $$('#taxList [data-tax]').filter((x) => x.checked).map((x) => x.dataset.tax), autoUpdate: $('#autoUpdate').checked,
     };
   }
 

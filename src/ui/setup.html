@@ -51,7 +51,8 @@
   <div class="rj-card rj-section">
     <h3>3. Taxes</h3>
     <label class="rj-field"><input type="checkbox" id="taxesOn" style="display:inline;width:auto"> Add taxes (VAT) to sales</label>
-    <p class="rj-hint">Off unless an admin turns it on. When an admin switches taxes on or off on the website, this till follows by itself.</p>
+    <div id="taxList"></div>
+    <p class="rj-hint">Off unless an admin turns it on. Only the taxes ticked here are added and printed on the bill; any tax not ticked (for example CGST or SGST) never shows. When an admin switches taxes on or off on the website, this till follows by itself.</p>
 
     <h3>4. Updates</h3>
     <label class="rj-field"><input type="checkbox" id="autoUpdate" style="display:inline;width:auto"> Download new versions by themselves</label>

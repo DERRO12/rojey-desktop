@@ -27,6 +27,8 @@
   function totals(order, settings) {
     const p = Number(settings && settings.precision != null ? settings.precision : 2);
     const collect = !settings || String(settings.collectTax || 'Yes') === 'Yes';
+    // only the taxes an admin ticked in Settings (when a list is given)
+    const allowed = settings && Array.isArray(settings.enabledTaxes) ? new Set(settings.enabledTaxes.map((n) => String(n).trim().toLowerCase())) : null;
     const exclusive = Number(settings && settings.taxType != null ? settings.taxType : 1) === 1;
     const taxMap = {};
     let subTotal = 0; let itemDiscount = 0; let items = 0; let qtyTotal = 0;
@@ -44,6 +46,7 @@
           if (!pct) continue;
           const amt = exclusive ? withDisc * pct / 100 : withDisc - withDisc / (1 + pct / 100);
           const name = t.tax_field_name || ('Tax ' + (t.tax_field_id || ''));
+          if (allowed && !allowed.has(String(name).trim().toLowerCase())) continue;
           if (!taxMap[name]) taxMap[name] = { tax_field_id: String(t.tax_field_id || ''), tax_field_type: name, amount: 0 };
           taxMap[name].amount += amt;
           taxes.push({ ...t, tax_field_amount: round(amt, p).toFixed(p) });

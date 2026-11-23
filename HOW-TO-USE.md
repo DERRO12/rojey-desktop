@@ -53,7 +53,7 @@ New versions are published on GitHub (github.com/DERRO12/rojey-desktop, under *R
 
 Taxes (VAT) are **off** by default, so bills and receipts show no tax lines.
 
-- An admin turns them on in **Settings > Taxes**.
+- An admin turns them on in **Settings > Taxes**, and ticks each tax to use (for example VAT). Taxes that are not ticked, such as CGST and SGST, are never added and never show on the bill.
 - When an admin switches taxes on or off on the website, every till follows by itself within about 30 seconds.
 
 ## Customers

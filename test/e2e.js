@@ -80,7 +80,9 @@ async function onPage(page, file) { return waitFor(async () => { try { return pa
   check('kitchens, tables, payments, waiters downloaded', cat.kitchens.length === 3 && cat.tables.length === 2 && cat.paymentMethods.length === 2 && cat.waiters.length >= 2,
     { k: cat.kitchens.length, t: cat.tables.length, p: cat.paymentMethods.length, w: (cat.waiters || []).length });
   check('taxes are off by default', (await call(page, 'pos:catalog')).settings.collectTax === 'No');
-  await call(page, 'setup:save', { taxesOn: true });
+  check('no tax is added until an admin ticks it', (await call(page, 'pos:catalog')).settings.enabledTaxes.length === 0);
+  check('the website\'s tax names are offered in Settings', (await call(page, 'setup:get')).taxNames.includes('VAT'));
+  await call(page, 'setup:save', { taxesOn: true, taxNames: ['VAT'] });
   check('admin turns taxes on in Settings', (await call(page, 'pos:catalog')).settings.collectTax === 'Yes');
   check('item picture saved on this computer', await waitFor(async () => /^file:/.test(await page.getAttribute('#item_30 img', 'src') || '')), await page.getAttribute('#item_30 img', 'src'));
   await page.screenshot({ path: path.join(SHOTS, 'pos-empty.png') });

@@ -58,7 +58,19 @@ function posSettings() {
   // taxes only when an admin has turned them on (in Settings here, or by switching them on on the website)
   s.webCollectTax = s.collectTax;
   s.collectTax = store.cfg.taxesOn ? 'Yes' : 'No';
+  s.enabledTaxes = Array.isArray(store.cfg.taxNames) ? store.cfg.taxNames : [];
   return s;
+}
+
+// every tax name the website's items use (VAT, CGST, SGST…), for the Settings tick boxes
+function taxNamesInMenu() {
+  const names = new Set();
+  for (const t of ['tbl_food_menus', 'tbl_modifiers']) {
+    for (const r of db.all(t, "tax_information IS NOT NULL AND tax_information != '' AND tax_information != '[]'")) {
+      try { for (const x of JSON.parse(r.tax_information) || []) if (x && x.tax_field_name) names.add(String(x.tax_field_name).trim()); } catch {}
+    }
+  }
+  return [...names].sort();
 }
 
 function isAdminUser(u) {
@@ -765,7 +777,7 @@ function registerIpc() {
   h('status', () => statusPayload());
 
   // settings
-  h('setup:get', async () => ({ cfg: { ...store.cfg }, kitchens: db.all('tbl_kitchens', '1=1'), printers: await windowsPrinters(), pending: db.syncCounts().pending + db.legacyPending().length, hasData: db.hasMenu(), isAdmin: !!(current && current.isAdmin), signedIn: !!current }));
+  h('setup:get', async () => ({ cfg: { ...store.cfg }, taxNames: taxNamesInMenu(), kitchens: db.all('tbl_kitchens', '1=1'), printers: await windowsPrinters(), pending: db.syncCounts().pending + db.legacyPending().length, hasData: db.hasMenu(), isAdmin: !!(current && current.isAdmin), signedIn: !!current }));
   h('setup:test-site', async (url) => {
     const base = normalizeBaseUrl(url);
     if (!base) return { ok: false, error: 'That is not a website address' };
@@ -779,7 +791,7 @@ function registerIpc() {
   h('setup:save', async (cfg) => {
     if (store.cfg.baseUrl && db.hasMenu() && !(current && current.isAdmin)) throw new Error('Only an admin can change Settings');
     const patch = {};
-    for (const k of ['receiptPrinter', 'kitchenPrinter', 'kitchenPrinters', 'paperWidth', 'autoPrintReceipt', 'kotCopies', 'receiptCopies', 'keepSyncedDays', 'autoOpenRegister', 'counterId', 'startFullscreen', 'taxesOn', 'autoUpdate']) if (cfg[k] !== undefined) patch[k] = cfg[k];
+    for (const k of ['receiptPrinter', 'kitchenPrinter', 'kitchenPrinters', 'paperWidth', 'autoPrintReceipt', 'kotCopies', 'receiptCopies', 'keepSyncedDays', 'autoOpenRegister', 'counterId', 'startFullscreen', 'taxesOn', 'taxNames', 'autoUpdate']) if (cfg[k] !== undefined) patch[k] = cfg[k];
     if (cfg.baseUrl !== undefined) {
       const base = normalizeBaseUrl(cfg.baseUrl);
       if (!base) throw new Error('Type the website address');
