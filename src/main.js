@@ -421,6 +421,10 @@ function saveOrder(input) {
       given_amount: calc.round(given, totals.precision), change_amount: calc.round(Math.max(0, given - totals.payable), totals.precision),
       payment_method_id: payments[0] ? payments[0].payment_id : null, paid_date_time: nowDateTime(), sync_attempts: 0, sync_error: null,
       kitchen_sync: null,
+      // like the website: the sale belongs to the person who invoices it (reports, receipt, upload with their sign-in)
+      user_id: current.userId, user_name: current.name,
+      // and to their shift: the register report counts sales from the time this person's register opened
+      date_time: nowDateTime(), sale_date: nowDateTime().slice(0, 10),
     });
   } else {
     Object.assign(header, { order_status: 1, sync_status: 'running', paid_amount: 0, due_amount: 0, kitchen_sync: 'pending', server_hash: null });
@@ -440,7 +444,7 @@ function saveOrder(input) {
   let printedTo = [];
   if (toKitchen.length) printedTo = printer.kot(saved, toKitchen, kitchens, { time: nowDateTime() });
   if (action === 'pay' && store.cfg.autoPrintReceipt) printer.receipt(withCustomer(saved), posSettings());
-  if (action === 'bill') printer.receipt(withCustomer(saved), posSettings(), { bill: true });
+  if (action === 'bill') printer.receipt({ ...withCustomer(saved), user_name: current.name }, posSettings(), { bill: true });
   log(`order ${saved.sale_no} saved (${action}), total ${saved.total_payable}, kitchen: ${printedTo.join(', ') || '-'}`);
   kick();
   pushStatus();
@@ -770,7 +774,7 @@ function registerIpc() {
     return { ok: true, saleNo: sale.sale_no };
   });
   h('print:retry', (id) => printer.retry(id));
-  h('pos:printBill', (id) => { needUser(); need('bill', 'print bills'); const sale = db.saleById(id); printer.receipt(withCustomer(sale), posSettings(), { bill: true }); return { ok: true }; });
+  h('pos:printBill', (id) => { needUser(); need('bill', 'print bills'); const sale = db.saleById(id); if (!sale) throw new Error('Order not found'); printer.receipt({ ...withCustomer(sale), user_name: sale.sync_status === 'running' ? current.name : sale.user_name }, posSettings(), { bill: true }); return { ok: true }; });
   h('sales:list', (f) => { needAdmin(); return db.listSales(f || {}); });
   h('sync:now', async () => { needUser(); await probe(); state.lastRunningPull = 0; await syncOnce(); return statusPayload(); });
   h('data:refresh', async () => { needUser(); if (!online) throw new Error('No internet'); return pullWith(current.account); });

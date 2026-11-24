@@ -299,6 +299,8 @@ async function onPage(page, file) { return waitFor(async () => { try { return pa
   check('no order uploaded twice', [...A.S.sales.values()].every((v) => v.times === 1), [...A.S.sales.values()].map((v) => v.times));
 
   console.log('cashier with PIN, register closed on the website');
+  const handOver = await call(page, 'pos:save', { action: 'kot', orderType: 2, waiterId: 8, waiterName: 'Waiter Ann', lines: [{ food_menu_id: 11, qty: 1 }] });
+  check('admin leaves a running order', handOver.ok && handOver.sale.user_name === 'Admin User', handOver);
   await page.click('#rj_logout');
   check('logout goes to sign in', await onPage(page, 'login.html'));
   await page.click('#tab_pin');
@@ -308,6 +310,11 @@ async function onPage(page, file) { return waitFor(async () => { try { return pa
   check('cashier sale uploaded', await waitFor(() => A.S.sales.has(cj.saleNo)));
   check('register opened by itself', A.S.registerOpens >= 1, A.S.registerOpens);
   check('uploaded as the cashier (id 5)', A.S.sales.get(cj.saleNo).user_id === 5);
+  const hoSale = await call(page, 'pos:get', handOver.saleId);
+  const hoPaid = await call(page, 'pos:save', { action: 'pay', saleId: handOver.saleId, orderType: 2, waiterId: 8, waiterName: 'Waiter Ann', lines: hoSale.lines.map((l) => ({ id: l.id, food_menu_id: l.food_menu_id, qty: l.qty, kot_qty: l.kot_qty })) });
+  check('the person who invoices an order owns the sale here', hoPaid.ok && hoPaid.sale.user_name === 'Cashier Jane' && Number(hoPaid.sale.user_id) === 5, hoPaid);
+  check('the sale counts in the cashier\'s shift (invoice time)', hoPaid.sale.date_time >= hoSale.date_time && hoPaid.sale.date_time === hoPaid.sale.paid_date_time, [hoSale.date_time, hoPaid.sale.date_time]);
+  check('and on the website (uploaded as the cashier)', await waitFor(() => A.S.sales.has(handOver.saleNo) && A.S.sales.get(handOver.saleNo).user_id === 5));
   check('cashier cannot open Settings', (await call(page, 'nav', 'setup')).ok === false);
   check('cashier cannot open the sales list', (await call(page, 'nav', 'sales')).ok === false && (await call(page, 'sales:list', {})).ok === false);
   console.log('permissions from the website role');

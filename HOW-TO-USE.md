@@ -63,6 +63,10 @@ Taxes (VAT) are **off** by default, so bills and receipts show no tax lines.
 - A new customer is saved on this computer at once and on the website as soon as there is internet. Their orders wait until the website has the customer, so nothing is mixed up.
 - A **Delivery** order needs a customer: the customer box opens by itself if none is chosen. The receipt shows the customer's phone number and delivery address.
 
+## Who a sale belongs to
+
+The person who **invoices** a bill owns the sale, as on the website. When one person signs out and another signs in and invoices the open bills, those sales go to the person now signed in: in the reports here, on the website and on the printed receipt. The sale time is the invoice time, so it falls in that person's shift. The waiter and the items stay as they were.
+
 ## Giving an order to someone else
 
 When the person who took an order signs out, or another waiter takes over a table:
