@@ -102,6 +102,7 @@ class Db {
     for (const c of ['table_design_content', 'floor_bg_color', 'ordered_bg_color', 'ordered_border_color', 'ordered_text_color']) add('tbl_areas', c, 'TEXT');
     add('tbl_users', 'pos_access', 'TEXT');
     add('tbl_customers', 'rj_pending', 'INTEGER DEFAULT 0');
+    add('tbl_sales', 'uploaded_by', 'INTEGER');     // whose website sign-in uploaded the sale (the website records that person)
     add('tbl_customers', 'phone', 'TEXT');
     this.cols = {};
     for (const t of [...MASTER_TABLES, 'tbl_sales', 'tbl_sales_details', 'tbl_sales_details_modifiers', 'tbl_sale_payments', 'tbl_orders_table']) {
@@ -348,10 +349,25 @@ class Db {
     return this.db.prepare("SELECT id, sale_no, user_id, updated_at FROM tbl_sales WHERE sync_status='pending' ORDER BY sync_attempts, created_at LIMIT ?").all(limit);
   }
 
-  markSynced(id, updatedAt, site, json) {
+  markSynced(id, updatedAt, site, json, by) {
     // Only if the order didn't change while it was uploading.
-    return this.db.prepare("UPDATE tbl_sales SET sync_status='synced', synced_at=?, synced_to=?, sync_error=NULL, order_json=? WHERE id=? AND updated_at=? AND sync_status='pending'")
-      .run(Date.now(), site, json, id, updatedAt).changes > 0;
+    return this.db.prepare("UPDATE tbl_sales SET sync_status='synced', synced_at=?, synced_to=?, sync_error=NULL, order_json=?, uploaded_by=? WHERE id=? AND updated_at=? AND sync_status='pending'")
+      .run(Date.now(), site, json, by == null ? null : Number(by), id, updatedAt).changes > 0;
+  }
+
+  // paid sales the website recorded under someone other than the person who invoiced them
+  wrongUploader() {
+    return this.db.prepare("SELECT id, user_id, user_name, sale_no FROM tbl_sales WHERE sync_status='synced' AND uploaded_by IS NOT NULL AND user_id IS NOT NULL AND uploaded_by != user_id").all();
+  }
+
+  // upload these again (the website updates a sale by its number, so nothing is doubled)
+  requeue(ids) {
+    const st = this.db.prepare("UPDATE tbl_sales SET sync_status='pending', sync_attempts=0, sync_error=NULL WHERE id=? AND sync_status='synced'");
+    let n = 0; for (const id of ids) n += st.run(id).changes; return n;
+  }
+
+  paidSince(dateTime) {
+    return this.db.prepare("SELECT id FROM tbl_sales WHERE sync_status='synced' AND order_status=3 AND uploaded_by IS NULL AND COALESCE(paid_date_time, date_time) >= ?").all(dateTime).map((r) => r.id);
   }
 
   markFailed(id, msg) {

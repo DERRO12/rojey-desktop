@@ -1,7 +1,7 @@
 {
   "name": "rojey-pos",
   "productName": "Rojey POS",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "description": "Rojey POS: standalone offline-first till that syncs with the Rojey (iRestora PLUS) website",
   "main": "src/main.js",
   "author": "Rojey Creamery",

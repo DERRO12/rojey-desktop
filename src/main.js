@@ -458,8 +458,19 @@ const MASTER_PULL_MS = Number(process.env.ROJEY_MASTER_MS) || 30 * 1000;
 let kickTimer = null;
 function kick() { clearTimeout(kickTimer); kickTimer = setTimeout(() => syncOnce().catch((e) => log('sync error ' + e.message)), 100); }
 
-async function withAccount(userId, fn) {
+// strict: a sale must reach the website with its own person's sign-in (the website records the signed-in
+// person as the seller). It waits for that sign-in rather than using someone else's, unless that person's
+// sign-in no longer works (password changed), so nothing is ever stuck.
+async function withAccount(userId, fn, strict) {
   let acc = store.accountForUser(userId);
+  if (strict && acc && !acc.broken) {
+    if (!(await ensureSession(acc))) {
+      if (!store.sec.accounts[acc.id] || !store.sec.accounts[acc.id].broken) return { state: 'error', text: 'Waiting to sign in on the website as ' + (acc.name || 'the seller'), network: false };
+    } else {
+      return attempts(acc, fn);
+    }
+    acc = store.accountForUser(userId);
+  }
   if (!acc || acc.broken) acc = (current && store.sec.accounts[current.account] && !store.sec.accounts[current.account].broken) ? { id: current.account, ...store.sec.accounts[current.account] } : store.anyAccount();
   if (!acc) return { state: 'error', text: 'No saved sign-in can upload this order yet' };
   if (!(await ensureSession(acc))) {
@@ -467,8 +478,13 @@ async function withAccount(userId, fn) {
     if (!other || other.id === acc.id || !(await ensureSession(other))) return { state: 'error', text: 'Sign-in on the website failed' };
     acc = other;
   }
+  return attempts(acc, fn);
+}
+
+async function attempts(acc, fn) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const r = await fn(acc.id);
+    if (r && typeof r === 'object') r.by = Number(acc.userId) || null;
     if (r.state === 'login') { server.loggedIn.delete(acc.id); if (!(await ensureSession(acc))) return { state: 'error', text: 'Sign-in on the website failed' }; continue; }
     if (r.state === 'register') {
       if (!store.cfg.autoOpenRegister) return { state: 'error', text: 'Register closed on the website' };
@@ -493,6 +509,16 @@ async function syncOnce() {
       if (newId) { db.customerSynced(c.id, newId); log('customer ' + c.name + ' saved on the website (' + newId + ')'); send('catalog-changed', {}); }
       else log('customer upload failed ' + c.name + ': ' + (r.text || r.state));
     }
+    // 0b) sales the website has under the wrong person: send again with the seller's own sign-in
+    const wrong = db.wrongUploader().filter((w) => { const a = store.accountForUser(w.user_id); return a && !a.broken; });
+    if (wrong.length) { db.requeue(wrong.map((w) => w.id)); log('sending ' + wrong.length + ' sale(s) again so the website shows the person who invoiced them'); }
+    if (!store.cfg.reupload253) {
+      // once: sales of the last 2 days go up again with the seller's sign-in, so today's website reports match the till
+      const since = nowDateTime(new Date(Date.now() - 2 * 86400000));
+      const n = db.requeue(db.paidSince(since));
+      store.saveConfig({ reupload253: true });
+      if (n) log('sending ' + n + ' recent sale(s) again so website reports show who invoiced them');
+    }
     // 1) paid orders -> Sale/push_online (same upload the web POS uses; the website updates by sale_no, so a repeat never doubles)
     for (const p of db.pendingSales(25)) {
       if (!online) break;
@@ -502,9 +528,10 @@ async function syncOnce() {
       const r = await withAccount(sale.user_id, async (acc) => {
         const x = await server.push(acc, json, sale.id);
         return x === 'ok' ? { state: 'ok' } : x === 'login' || x === 'register' ? { state: x } : { state: 'error', text: x.replace(/^error:/, '') };
-      }).catch((e) => ({ state: 'error', text: e.message, network: true }));
+      }, true).catch((e) => ({ state: 'error', text: e.message, network: true }));
       if (r.state === 'ok') {
-        db.markSynced(sale.id, sale.updated_at, store.cfg.baseUrl, json);
+        db.markSynced(sale.id, sale.updated_at, store.cfg.baseUrl, json, r.by);
+        if (r.by && Number(r.by) !== Number(sale.user_id)) log('sale ' + sale.sale_no + ' uploaded with another sign-in; it is sent again as ' + sale.user_name + ' when that sign-in works');
         db.log(sale.sale_no, 'ok', '');
         state.lastSync = Date.now(); state.lastError = '';
       } else {
@@ -697,7 +724,7 @@ function registerIpc() {
   h('app:state', () => ({ configured: !!store.cfg.baseUrl, hasData: db.hasMenu(), online, user: publicUser(), status: statusPayload(), settings: posSettings(), version: app.getVersion(),
     outletName: posSettings().outletName || '', accounts: Object.values(store.sec.accounts).map((a) => a.name).filter(Boolean) }));
   h('auth:login', (creds) => signIn(creds));
-  h('auth:logout', () => { log('signed out: ' + (current && current.name)); current = null; setImmediate(goHome); setTimeout(autoInstall, 3000); return { ok: true }; });
+  h('auth:logout', () => { log('signed out: ' + (current && current.name)); kick(); current = null; setImmediate(goHome); setTimeout(autoInstall, 3000); return { ok: true }; });
   h('nav', (where) => {
     if (where === 'setup') { if (store.cfg.baseUrl && db.hasMenu() && !(current && current.isAdmin)) throw new Error('Only an admin can open Settings'); win.loadFile(ui('setup.html')); }
     else if (where === 'sales') { needAdmin(); win.loadFile(ui('sales.html')); }
