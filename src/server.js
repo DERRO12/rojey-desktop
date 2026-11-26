@@ -83,7 +83,16 @@ class Server {
   }
 
   // creds: { email, password } or { pin }
+  // one sign-in at a time per cookie jar: two at once cleared each other's cookies
   async login(key, creds) {
+    this.logins = this.logins || new Map();
+    const prev = this.logins.get(key) || Promise.resolve();
+    const run = prev.catch(() => {}).then(() => this.loginNow(key, creds));
+    this.logins.set(key, run);
+    try { return await run; } finally { if (this.logins.get(key) === run) this.logins.delete(key); }
+  }
+
+  async loginNow(key, creds) {
     const ses = jar(key);
     await ses.clearStorageData({ storages: ['cookies'] }).catch(() => {});
     const first = await go(ses, this.url('Authentication/index'), { timeout: 15000 });

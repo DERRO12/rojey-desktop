@@ -353,7 +353,7 @@ class Db {
   }
 
   pendingSales(limit = 20) {
-    return this.db.prepare("SELECT id, sale_no, user_id, updated_at FROM tbl_sales WHERE sync_status='pending' ORDER BY sync_attempts, created_at LIMIT ?").all(limit);
+    return this.db.prepare("SELECT id, sale_no, user_id, updated_at, sync_attempts FROM tbl_sales WHERE sync_status='pending' ORDER BY sync_attempts, created_at LIMIT ?").all(limit);
   }
 
   markSynced(id, updatedAt, site, json, by) {

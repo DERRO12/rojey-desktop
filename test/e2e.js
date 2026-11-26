@@ -42,7 +42,7 @@ async function launch() {
   const app = await electron.launch({
     executablePath: path.join(ROOT, 'node_modules/electron/dist/electron'),
     args: [ROOT, '--no-sandbox'],
-    env: { ...process.env, ROJEY_USER_DATA: USER_DATA, ROJEY_PRINT_DIR: PRINT_DIR, ROJEY_PROBE_MS: '700', ROJEY_SYNC_MS: '600', ROJEY_MASTER_MS: '4000' },
+    env: { ...process.env, ROJEY_USER_DATA: USER_DATA, ROJEY_PRINT_DIR: PRINT_DIR, ROJEY_PROBE_MS: '700', ROJEY_SYNC_MS: '600', ROJEY_MASTER_MS: '4000', ROJEY_PERM_MS: '3000', ROJEY_BROKEN_RETRY_MS: '2000' },
   });
   const page = await app.firstWindow();
   page.on('pageerror', (e) => console.log('  [page error] ' + e.message));
@@ -303,6 +303,30 @@ async function onPage(page, file) { return waitFor(async () => { try { return pa
   check('sales of all tills can be filtered by person', (await call(page, 'sales:web', { userId: 5 })).rows.every((r) => r.user === 'Cashier Jane'));
   check('the till knows when it is busy (no update in the middle of an order)', (await page.evaluate(() => window.__rjIdle())) === false);
 
+  console.log('version 2.6.1: every order reaches the website by itself');
+  // the website forgets every sign-in and refuses the next few sign-ins (a bad moment on the website)
+  A.S.sessions.clear(); A.S.failLogins = 4;
+  const many = [];
+  for (let i = 0; i < 6; i++) many.push(await call(page, 'pos:save', { action: 'pay', orderType: 2, lines: [{ food_menu_id: 10, qty: 1 }] }));
+  check('orders paid while the website refused sign-ins', many.every((m) => m.ok));
+  check('all of them reach the website by themselves (no sync button, no new sign-in)', await waitFor(() => many.every((m) => A.S.sales.has(m.saleNo)), 25000), many.filter((m) => !A.S.sales.has(m.saleNo)).map((m) => m.saleNo));
+  check('nothing left waiting', await waitFor(async () => (await call(page, 'status')).pending === 0, 10000), await call(page, 'status'));
+  // uploads keep going while the till signs in again every few seconds for permissions
+  const busy = [];
+  for (let i = 0; i < 8; i++) { busy.push(await call(page, 'pos:save', { action: 'pay', orderType: 2, lines: [{ food_menu_id: 11, qty: 1 }] })); await sleep(700); }
+  check('orders keep uploading while permissions refresh', await waitFor(() => busy.every((m) => A.S.sales.has(m.saleNo)), 20000), busy.filter((m) => !A.S.sales.has(m.saleNo)).map((m) => m.saleNo));
+  // the sync button sends every waiting order, not just a first batch
+  A.S.down = true;
+  await waitFor(async () => !(await call(page, 'status')).online);
+  const queued = [];
+  for (let i = 0; i < 30; i++) queued.push(await call(page, 'pos:save', { action: 'pay', orderType: 2, lines: [{ food_menu_id: 30, qty: 1 }] }));
+  check('30 orders waiting offline', (await call(page, 'status')).pending >= 30);
+  A.S.down = false;
+  const afterBtn = await call(page, 'sync:now');
+  check('the sync button sends every waiting order', afterBtn.online && afterBtn.pending === 0 && queued.every((m) => A.S.sales.has(m.saleNo)), { pending: afterBtn.pending, missing: queued.filter((m) => !A.S.sales.has(m.saleNo)).length });
+  await sleep(1500);
+  check('still no order uploaded twice by the sync button', queued.every((m) => A.S.sales.get(m.saleNo).times === 1));
+
   console.log('changes on the website arrive by themselves');
   A.S.items[1].price = '210.00';
   check('new price shows without doing anything', await waitFor(async () => /210\.00/.test(await page.textContent('#item_11')), 20000), await page.textContent('#item_11'));
@@ -324,7 +348,8 @@ async function onPage(page, file) { return waitFor(async () => { try { return pa
   check('uploads by itself when back online', await waitFor(() => A.S.sales.has(off1.saleNo), 20000));
   check('offline running order shared when back', await waitFor(() => A.S.kitchen.has(off2.saleNo), 10000));
   await sleep(1500);
-  check('no order uploaded twice', [...A.S.sales.values()].every((v) => v.times === 1), [...A.S.sales.values()].map((v) => v.times));
+  const may2 = new Set([...many, ...busy].map((m) => m.saleNo));   // these may go up again as their seller (2.5.3)
+  check('no order uploaded twice', [...A.S.sales.entries()].every(([k, v]) => v.times === 1 || may2.has(k)), [...A.S.sales.values()].map((v) => v.times));
 
   console.log('cashier with PIN, register closed on the website');
   const handOver = await call(page, 'pos:save', { action: 'kot', orderType: 2, waiterId: 8, waiterName: 'Waiter Ann', lines: [{ food_menu_id: 11, qty: 1 }] });

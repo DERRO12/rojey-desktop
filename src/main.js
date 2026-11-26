@@ -21,7 +21,7 @@ const calc = require('./ui/calc');
 let db; let store; let server; let printer; let win = null;
 let online = false;
 let current = null;            // signed-in person: { userId, name, role, designation, account, isAdmin, shortName }
-const state = { syncing: false, lastSync: 0, lastError: '', lastPullError: '', pulling: false, lastRunningPull: 0 };
+const state = { syncing: false, syncStarted: 0, lastSync: 0, lastError: '', lastPullError: '', pulling: false, lastRunningPull: 0 };
 
 // ---------------------------------------------------------------------------------------------
 // log
@@ -156,9 +156,16 @@ async function probe() {
 
 // ---------------------------------------------------------------------------------------------
 // sign in
+// A sign-in that failed once is tried again after a short wait: one bad moment on the website must never
+// leave an account (and the orders it uploads) blocked until someone signs in again.
+const BROKEN_RETRY_MS = Number(process.env.ROJEY_BROKEN_RETRY_MS) || 60 * 1000;
+function usable(a) { return !!(a && a.creds && (!a.broken || Date.now() - a.broken > BROKEN_RETRY_MS)); }
+function accountById(id) { const a = id && store.sec.accounts[id]; return a ? { id, ...a } : null; }
+
 async function ensureSession(account) {
   const fresh = server.loggedIn.get(account.id);
   if (fresh && Date.now() - fresh < 90 * 60 * 1000) return true;
+  if (!usable(account)) return false;
   const r = await server.login(account.id, account.creds);
   if (!r.ok) { store.markBroken(account.id, true); return false; }
   store.markBroken(account.id, false);
@@ -216,12 +223,17 @@ let lastPermRefresh = 0;
 async function backgroundPull() {
   if (!current || !online) return;
   const id = current.account; const acc = store.sec.accounts[id];
-  if (acc && acc.creds && !state.syncing && Date.now() - lastPermRefresh > PERM_REFRESH_MS) {
+  // The fresh website sign-in (so role changes show) happens in a separate cookie jar. Signing in again in the
+  // jar that uploads orders cleared its cookies in the middle of uploads (2.6.0), so some orders failed and waited.
+  let key = id;
+  if (acc && acc.creds && Date.now() - lastPermRefresh > PERM_REFRESH_MS) {
     lastPermRefresh = Date.now();
-    await server.login(id, acc.creds).catch(() => {});
-  }
+    const permKey = 'perm_' + id;
+    const r = await server.login(permKey, acc.creds).catch(() => ({ ok: false }));
+    if (r.ok) key = permKey;
+  } else if (server.loggedIn.get('perm_' + id)) key = 'perm_' + id;
   if (!current) return;
-  await pullWith(current.account).catch(() => {});
+  await pullWith(key).catch(() => {});
 }
 
 // creds: { email, password } or { pin }
@@ -472,24 +484,32 @@ function kick() { clearTimeout(kickTimer); kickTimer = setTimeout(() => syncOnce
 // strict: a sale must reach the website with its own person's sign-in (the website records the signed-in
 // person as the seller). It waits for that sign-in rather than using someone else's, unless that person's
 // sign-in no longer works (password changed), so nothing is ever stuck.
-async function withAccount(userId, fn, strict) {
-  let acc = store.accountForUser(userId);
-  if (strict && acc && !acc.broken) {
-    if (!(await ensureSession(acc))) {
-      if (!store.sec.accounts[acc.id] || !store.sec.accounts[acc.id].broken) return { state: 'error', text: 'Waiting to sign in on the website as ' + (acc.name || 'the seller'), network: false };
-    } else {
-      return attempts(acc, fn);
-    }
-    acc = store.accountForUser(userId);
+// fallback: when the seller's own sign-in keeps failing for this order, upload it with another sign-in so it
+// reaches the website anyway (it is sent again as the seller later, see wrongUploader).
+async function withAccount(userId, fn, strict, fallback) {
+  const owner = store.accountForUser(userId);
+  const tried = new Set();
+  let ownerProblem = '';
+  if (owner && usable(owner)) {
+    tried.add(owner.id);
+    if (await ensureSession(owner)) {
+      const r = await attempts(owner, fn);
+      if (r.state === 'ok' || r.network || (strict && !fallback)) return r;
+      ownerProblem = r.text || r.state;
+    } else if (strict && !fallback) return { state: 'error', text: 'Waiting to sign in on the website as ' + (owner.name || 'the seller') };
   }
-  if (!acc || acc.broken) acc = (current && store.sec.accounts[current.account] && !store.sec.accounts[current.account].broken) ? { id: current.account, ...store.sec.accounts[current.account] } : store.anyAccount();
-  if (!acc) return { state: 'error', text: 'No saved sign-in can upload this order yet' };
-  if (!(await ensureSession(acc))) {
-    const other = store.anyAccount();
-    if (!other || other.id === acc.id || !(await ensureSession(other))) return { state: 'error', text: 'Sign-in on the website failed' };
-    acc = other;
+  const list = [];
+  if (current) list.push(accountById(current.account));
+  for (const [id, a] of Object.entries(store.sec.accounts).sort((x, y) => (y[1].savedAt || 0) - (x[1].savedAt || 0))) list.push({ id, ...a });
+  for (const acc of list) {
+    if (!acc || tried.has(acc.id) || !usable(acc)) continue;
+    tried.add(acc.id);
+    if (!(await ensureSession(acc))) continue;
+    const r = await attempts(acc, fn);
+    if (r.state === 'ok' || r.network) return r;
+    ownerProblem = ownerProblem || r.text || r.state;
   }
-  return attempts(acc, fn);
+  return { state: 'error', text: ownerProblem || (tried.size ? 'Sign-in on the website failed' : 'No saved sign-in can upload this order yet') };
 }
 
 async function attempts(acc, fn) {
@@ -507,9 +527,20 @@ async function attempts(acc, fn) {
   return { state: 'error', text: 'Website kept refusing' };
 }
 
-async function syncOnce() {
-  if (state.syncing || !online || !store.cfg.baseUrl) return;
-  state.syncing = true; pushStatus();
+// one website request that never answers must not stop uploads: after this long a new run starts anyway
+const SYNC_STUCK_MS = Number(process.env.ROJEY_SYNC_STUCK_MS) || 3 * 60 * 1000;
+let syncRun = 0;
+const requeuedAt = new Map();   // sale id -> when it was last sent again for the right person
+async function stillOnline() { try { return await server.ping(6000); } catch { return false; } }
+
+async function syncOnce(limit = 25) {
+  if (!online || !store.cfg.baseUrl) return;
+  if (state.syncing) {
+    if (Date.now() - state.syncStarted < SYNC_STUCK_MS) return;
+    log('upload run was stuck for ' + Math.round((Date.now() - state.syncStarted) / 1000) + 's; starting a new one');
+  }
+  const run = ++syncRun;
+  state.syncing = true; state.syncStarted = Date.now(); pushStatus();
   const s = posSettings();
   try {
     // 0) customers added or changed here -> the website (orders for a new customer wait for its number)
@@ -521,7 +552,8 @@ async function syncOnce() {
       else log('customer upload failed ' + c.name + ': ' + (r.text || r.state));
     }
     // 0b) sales the website has under the wrong person: send again with the seller's own sign-in
-    const wrong = db.wrongUploader().filter((w) => { const a = store.accountForUser(w.user_id); return a && !a.broken; });
+    const wrong = db.wrongUploader().filter((w) => { const a = store.accountForUser(w.user_id); return a && !a.broken && Date.now() - (requeuedAt.get(w.id) || 0) > 20 * 60 * 1000; }).slice(0, 25);
+    for (const w of wrong) requeuedAt.set(w.id, Date.now());
     if (wrong.length) { db.requeue(wrong.map((w) => w.id)); log('sending ' + wrong.length + ' sale(s) again so the website shows the person who invoiced them'); }
     if (!store.cfg.reupload253) {
       // once: sales of the last 2 days go up again with the seller's sign-in, so today's website reports match the till
@@ -531,15 +563,15 @@ async function syncOnce() {
       if (n) log('sending ' + n + ' recent sale(s) again so website reports show who invoiced them');
     }
     // 1) paid orders -> Sale/push_online (same upload the web POS uses; the website updates by sale_no, so a repeat never doubles)
-    for (const p of db.pendingSales(25)) {
-      if (!online) break;
+    for (const p of db.pendingSales(limit)) {
+      if (!online || run !== syncRun) break;
       const sale = db.saleById(p.id);
       if (Number(sale.customer_id) < 0) continue;     // its new customer is not on the website yet
       const json = buildOrderJson(sale, s);
       const r = await withAccount(sale.user_id, async (acc) => {
         const x = await server.push(acc, json, sale.id);
         return x === 'ok' ? { state: 'ok' } : x === 'login' || x === 'register' ? { state: x } : { state: 'error', text: x.replace(/^error:/, '') };
-      }, true).catch((e) => ({ state: 'error', text: e.message, network: true }));
+      }, true, (p.sync_attempts || 0) >= 2).catch((e) => ({ state: 'error', text: e.message, network: true }));
       if (r.state === 'ok') {
         db.markSynced(sale.id, sale.updated_at, store.cfg.baseUrl, json, r.by);
         if (r.by && Number(r.by) !== Number(sale.user_id)) log('sale ' + sale.sale_no + ' uploaded with another sign-in; it is sent again as ' + sale.user_name + ' when that sign-in works');
@@ -548,7 +580,8 @@ async function syncOnce() {
       } else {
         db.markFailed(sale.id, r.text); db.log(sale.sale_no, 'error', r.text);
         state.lastError = sale.sale_no + ': ' + r.text; log('upload failed ' + state.lastError);
-        if (r.network) { online = false; break; }
+        // a slow answer for one order must not stop the others: stop only if the website is really unreachable
+        if (r.network && !(await stillOnline())) { online = false; log('connection: OFFLINE (upload)'); pushStatus(); break; }
       }
       pushStatus();
     }
@@ -563,8 +596,8 @@ async function syncOnce() {
       if (r.state === 'ok') { db.legacyDone(o.rid); db.log(o.sale_no, 'ok', 'from version 1'); } else db.legacyFailed(o.rid, r.text);
     }
     // 3) running orders -> shared with the website so the kitchen screen and other tills see them
-    for (const k of db.kitchenPending(25)) {
-      if (!online) break;
+    for (const k of db.kitchenPending(limit)) {
+      if (!online || run !== syncRun) break;
       const sale = db.saleById(k.id);
       if (Number(sale.customer_id) < 0) continue;
       const json = buildOrderJson(sale, s, { running: true });
@@ -582,8 +615,26 @@ async function syncOnce() {
     const removed = db.purgeSynced(store.cfg.keepSyncedDays);
     if (removed) log('removed ' + removed + ' uploaded orders older than ' + store.cfg.keepSyncedDays + ' days');
   } finally {
-    state.syncing = false; pushStatus();
+    if (run === syncRun) { state.syncing = false; pushStatus(); }
   }
+}
+
+// The sync button (everyone): wait for the upload already running, then send every waiting order,
+// run after run, until nothing is left or nothing more can go.
+async function syncAll() {
+  await probe();
+  if (!online) return;
+  const t0 = Date.now();
+  while (state.syncing && Date.now() - t0 < 90 * 1000 && Date.now() - state.syncStarted < SYNC_STUCK_MS) await new Promise((r) => setTimeout(r, 250));
+  state.lastRunningPull = 0;
+  const waiting = () => { const c = db.syncCounts(); return c.pending + db.kitchenPending(1000).length + db.legacyPending().length; };
+  for (let i = 0; i < 50 && online; i++) {
+    const before = waiting();
+    await syncOnce(200);
+    const after = waiting();
+    if (!after || after >= before) break;
+  }
+  log('sync button: ' + waiting() + ' waiting after the upload');
 }
 
 // A cashier on the website sees every running order of the outlet; anyone else sees only their own.
@@ -818,7 +869,7 @@ function registerIpc() {
   h('print:retry', (id) => printer.retry(id));
   h('pos:printBill', (id) => { needUser(); need('bill', 'print bills'); const sale = db.saleById(id); if (!sale) throw new Error('Order not found'); printer.receipt({ ...withCustomer(sale), user_name: sale.sync_status === 'running' ? current.name : sale.user_name }, posSettings(), { bill: true }); return { ok: true }; });
   h('sales:list', (f) => { needAdmin(); return db.listSales(f || {}); });
-  h('sync:now', async () => { needUser(); await probe(); state.lastRunningPull = 0; await syncOnce(); return statusPayload(); });
+  h('sync:now', async () => { needUser(); await syncAll(); return statusPayload(); });
   h('data:refresh', async () => { needUser(); if (!online) throw new Error('No internet'); return pullWith(current.account); });
   h('status', () => statusPayload());
 

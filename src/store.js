@@ -106,7 +106,7 @@ class Store {
 
   anyAccount() {
     let best = null;
-    for (const [id, a] of Object.entries(this.sec.accounts)) if (!a.broken && (!best || (a.savedAt || 0) > (best.savedAt || 0))) best = { id, ...a };
+    for (const [id, a] of Object.entries(this.sec.accounts)) if ((!a.broken || Date.now() - a.broken > 60000) && (!best || (a.savedAt || 0) > (best.savedAt || 0))) best = { id, ...a };
     return best;
   }
 

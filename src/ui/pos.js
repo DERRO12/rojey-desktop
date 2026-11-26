@@ -944,7 +944,13 @@
       const r = await api.call('data:refresh');
       if (r.ok === false) toast(r.error, 'error', 6000); else toast('Menu and settings are up to date');
     });
-    $('#sync_online').addEventListener('click', async (e) => { e.preventDefault(); const st = await api.call('sync:now'); showStatus(st); loadRunning(); toast(st.online ? 'Synced' : 'No internet: orders are kept and will upload later', st.online ? 'success' : 'info'); });
+    $('#sync_online').addEventListener('click', async (e) => { e.preventDefault(); $('#sync_online i').classList.add('fa-spin'); toast('Sending every waiting order to the website...', 'info');
+      const st = await api.call('sync:now').catch((err) => ({ error: err.message })); showStatus(st); loadRunning();
+      const left = (st.pending || 0) + (st.legacyPending || 0);
+      if (st.error) toast(st.error, 'error');
+      else if (!st.online) toast('No internet: orders are kept and will upload later', 'info');
+      else if (!left) toast('All orders are on the website', 'success');
+      else toast(left + ' order(s) still waiting' + (st.lastError ? ': ' + st.lastError : '') + '. They keep trying by themselves.', 'error'); });
     $('#pull_running_order').addEventListener('click', async (e) => { e.preventDefault(); await api.call('sync:now'); await loadRunning(); toast('Running orders updated'); });
     $('#online_status').addEventListener('click', (e) => e.preventDefault());
 

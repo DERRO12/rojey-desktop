@@ -94,6 +94,7 @@ function createFakeServer() {
     if (p === 'Authentication/index' || p === '') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(loginHtml); }
     if (p === 'Authentication/loginCheck') {
       S.logins++;
+      if (S.failLogins > 0) { S.failLogins--; return redirect(res, base + 'Authentication/index'); }
       const found = form.active_login_button_hidden === '1'
         ? S.users.find((x) => x.email === form.email_address && x.password === form.password)
         : S.users.find((x) => x.pin === form.login_pin);

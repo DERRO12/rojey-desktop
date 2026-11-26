@@ -1,4 +1,4 @@
-# Rojey POS 2.6: how to use
+# Rojey POS 2.6.1: how to use
 
 Rojey POS 2.5 is a till program for Windows. It has its own database, so it keeps working when there is no internet. It sends everything to your website (pos.rojeycreamery.com) by itself when the internet is back. Nothing on the website needs to change.
 
@@ -195,6 +195,8 @@ The status button at the top shows **Online** or **Offline**, plus the number of
 - **Website changes** (menu, prices, tables and floor plans, users, permissions, payment methods) arrive by themselves within about 30 seconds, with nothing to click. The cloud icon fetches them at once.
 - **Everything is kept on this computer**: every order, payment and a copy of every kitchen ticket (KOT). Once the website has confirmed an uploaded order, it and its KOT copies are cleared after the number of days set in Settings (**12 days** by default). Running orders and orders still waiting to upload are never cleared.
 - The two buttons at the top right do this now: the red one gets running orders, and the green one uploads.
+- **The green sync button (F9) is for everyone**, cashiers too. It sends **every** waiting order, not just some, and then says *All orders are on the website* or how many are still waiting and why. You normally never need it: orders go up by themselves within seconds.
+- **2.6.1:** if the website refuses a sign-in for a moment (busy or restarting), the till tries again by itself a minute later. Before 2.6.1 such orders waited until someone signed in or an admin pressed sync. If a seller's own sign-in keeps failing, the order goes up with another saved sign-in so it is never stuck, and it is sent again under the seller once their sign-in works.
 
 ## If the website address changes or the site is down
 
