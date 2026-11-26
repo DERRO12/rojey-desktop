@@ -326,3 +326,13 @@ body.rj-pos #order_details_holder .inside_single_order_container:not(.active) { 
 .rj-cl-top input { margin-bottom: 0 !important; flex: 1; }
 #rj_customer_list .rj-wl-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rj-cl-edit { color: #0c5889; padding: 4px 6px; cursor: pointer; }
+
+/* split bill */
+.rj-split .rj-qty { display: inline-flex; align-items: center; gap: 4px; }
+.rj-split .rj-qty input { width: 64px; text-align: center; }
+.rj-split .rj-qty button { min-width: 30px; height: 30px; border: 1px solid #ccc; background: #f5f5f5; border-radius: 4px; cursor: pointer; }
+.rj-split .rj-qty .rj-all { min-width: 40px; }
+/* printers */
+#rj_printers { position: relative; }
+.rj-bad-dot { background: #e53935 !important; display: none; }
+.rj-badge.failed { background: #e53935; color: #fff; }

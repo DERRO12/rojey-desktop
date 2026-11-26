@@ -22,7 +22,7 @@ function page(body, width) {
     .c { text-align: center; } .r { text-align: right; } .b { font-weight: bold; }
     .big { font-size: 15px; }
     table { width: 100%; border-collapse: collapse; }
-    td, th { padding: 2px 0; vertical-align: top; }
+    td, th { padding: 2px 0; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
     th { text-align: left; border-bottom: 1px dashed #000; }
     .line { border-top: 1px dashed #000; margin: 4px 0; }
     .mods { font-size: 11px; padding-left: 8px; }

@@ -104,7 +104,7 @@ class Updater {
 
   start() {
     setTimeout(() => this.check(), Number(process.env.ROJEY_UPDATE_FIRST_MS) || 20000);
-    setInterval(() => this.check(), Number(process.env.ROJEY_UPDATE_MS) || 30 * 60 * 1000).unref();
+    setInterval(() => this.check(), Number(process.env.ROJEY_UPDATE_MS) || 10 * 60 * 1000).unref();
   }
 }
 

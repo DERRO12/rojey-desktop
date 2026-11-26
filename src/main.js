@@ -208,9 +208,20 @@ async function pullWith(accountId) {
   } finally { state.pulling = false; pushStatus(); }
 }
 
-function backgroundPull() {
+// The website keeps a person's permissions in their website session from the moment they sign in there.
+// So the till signs in again on the website every few minutes: a change an admin makes to a role reaches
+// the till without anyone signing out.
+const PERM_REFRESH_MS = Number(process.env.ROJEY_PERM_MS) || 2 * 60 * 1000;
+let lastPermRefresh = 0;
+async function backgroundPull() {
   if (!current || !online) return;
-  pullWith(current.account).catch(() => {});
+  const id = current.account; const acc = store.sec.accounts[id];
+  if (acc && acc.creds && !state.syncing && Date.now() - lastPermRefresh > PERM_REFRESH_MS) {
+    lastPermRefresh = Date.now();
+    await server.login(id, acc.creds).catch(() => {});
+  }
+  if (!current) return;
+  await pullWith(current.account).catch(() => {});
 }
 
 // creds: { email, password } or { pin }
@@ -357,7 +368,7 @@ function buildSale(input, existing) {
   }));
   const now = new Date();
   const header = {
-    sale_no: existing ? existing.sale_no : newSaleNo(),
+    sale_no: existing ? existing.sale_no : (input.splitNo || newSaleNo()),
     customer_id: String(input.customerId || s.defaultCustomer || 1), customer_name: input.customerName || 'Walk-in Customer',
     total_items: lines.length, sub_total: t.subTotal, vat: t.vat, total_payable: t.payable,
     total_item_discount_amount: t.itemDiscount, sub_total_with_discount: t.subTotalWithDiscount, sub_total_discount_amount: t.orderDiscount,
@@ -382,10 +393,10 @@ function saveOrder(input) {
   if (existing && existing.sync_status !== 'running') throw new Error('This order is already closed');
   const P = perms();
   if (input.action === 'kot') need(existing ? 'modifyOrder' : 'placeOrder', existing ? 'modify orders' : 'place orders');
-  if (input.action === 'pay') need(existing ? 'invoice' : 'directInvoice', existing ? 'take payment for orders' : 'make a direct invoice');
+  if (input.action === 'pay') need(existing || input.splitNo ? 'invoice' : 'directInvoice', existing || input.splitNo ? 'take payment for orders' : 'make a direct invoice');
   if (input.action === 'bill') need('bill', 'print bills');
-  if (String(input.discount || '').trim() && Number(String(input.discount).replace('%', '')) && !P.discount) throw new Error('You are not allowed to give discounts.');
-  if ((input.lines || []).some((l) => String(l.discount || '').trim() && Number(String(l.discount).replace('%', ''))) && !P.discount) throw new Error('You are not allowed to give discounts.');
+  if (!input.splitNo && String(input.discount || '').trim() && Number(String(input.discount).replace('%', '')) && !P.discount) throw new Error('You are not allowed to give discounts.');
+  if (!input.splitNo && (input.lines || []).some((l) => String(l.discount || '').trim() && Number(String(l.discount).replace('%', ''))) && !P.discount) throw new Error('You are not allowed to give discounts.');
   if (Number(String(input.charge || '').replace('%', '')) && !P.charge) throw new Error('You are not allowed to add a charge.');
   if (Number(input.tips) && !P.tips) throw new Error('You are not allowed to add tips.');
   if (existing && !P.removeSent) {
@@ -557,7 +568,7 @@ async function syncOnce() {
       const sale = db.saleById(k.id);
       if (Number(sale.customer_id) < 0) continue;
       const json = buildOrderJson(sale, s, { running: true });
-      const r = await withAccount(sale.user_id, (acc) => (k.kitchen_sync === 'cancel' ? server.kitchenCancel(acc, json) : server.kitchenPush(acc, json)))
+      const r = await withAccount(sale.user_id, (acc) => (k.kitchen_sync === 'cancel' ? server.kitchenCancel(acc, json) : k.kitchen_sync === 'delete' ? server.mergeDelete(acc, sale.sale_no) : server.kitchenPush(acc, json)))
         .catch((e) => ({ state: 'error', text: e.message }));
       if (r.state === 'ok') db.kitchenDone(sale.id, sale.updated_at, k.kitchen_sync);
       else log('running order share failed ' + sale.sale_no + ': ' + r.text);
@@ -738,6 +749,10 @@ function registerIpc() {
     return list.map((s) => ({ ...s, lines: db.saleById(s.id).lines.length }));
   });
   h('pos:get', (id) => { needUser(); return db.saleById(id); });
+  h('pos:split', (input) => splitPay(input));
+  h('printers:status', async () => { needUser(); return printerStatus(); });
+  h('sales:web', async (f) => { needAdmin(); return webSales(f || {}); });
+  h('sales:people', () => { needAdmin(); return db.all('tbl_users', '1=1', 'full_name').map((u) => ({ id: u.id, name: u.full_name })); });
   h('pos:kots', (saleNo) => { needUser(); return db.kotsFor(saleNo); });
   // people an order can be given to: waiters and everyone else who uses the till
   h('pos:customerSave', (c) => {
@@ -879,10 +894,110 @@ app.on('before-quit', () => { try { if (updater && updater.canInstall()) updater
 
 // Automatic updates: installed by themselves when nobody is signed in (the till is not in use),
 // or when the app is closed. An admin can also install at once with the update button.
-function autoInstall() {
-  if (!updater || !updater.canInstall() || current || store.cfg.autoUpdate === false) return;
-  if (state.syncing) { setTimeout(autoInstall, 5000); return; }
-  updater.install(true, 'nobody signed in');
+// Updates install by themselves as soon as they are downloaded: at once when nobody is signed in, otherwise the
+// moment the till is idle (empty cart, no window open, nobody touched it for a minute). The person signed in
+// stays signed in: the new version opens straight on the POS screen.
+let installWait = null;
+async function autoInstall() {
+  clearTimeout(installWait); installWait = null;
+  if (!updater || !updater.canInstall() || store.cfg.autoUpdate === false) return;
+  if (state.syncing) { installWait = setTimeout(autoInstall, 5000); return; }
+  if (!current) { updater.install(true, 'nobody signed in'); return; }
+  let idle = false;
+  try { idle = !!(win && !win.isDestroyed() && await win.webContents.executeJavaScript('typeof window.__rjIdle === "function" ? window.__rjIdle() : false', true)); } catch { idle = false; }
+  if (!idle) { installWait = setTimeout(autoInstall, 30000); return; }
+  store.saveConfig({ resume: { account: current.account, at: Date.now() } });
+  const r = updater.install(true, 'till idle; ' + current.name + ' stays signed in');
+  if (!r || !r.ok || r.dryRun) store.saveConfig({ resume: null });
+}
+
+// after an automatic update, the person who was signed in carries on where they were
+function resumeAfterUpdate() {
+  const r = store.cfg.resume;
+  if (!r) return;
+  store.saveConfig({ resume: null });
+  if (!r.account || Date.now() - Number(r.at || 0) > 15 * 60 * 1000) return;
+  const a = store.sec.accounts[r.account];
+  if (!a || !a.userId) return;
+  const u = db.user(a.userId) || {};
+  const info = { userId: Number(a.userId), name: u.full_name || a.name || '', role: u.role || a.role || '', designation: u.designation || a.designation || '', shortName: u.short_name || a.shortName || '' };
+  current = { ...info, account: r.account, isAdmin: isAdminUser(info) };
+  log('signed in again after the update: ' + current.name);
+}
+
+// ---------------------------------------------------------------------------------------------
+// split bill, the same way as the website: some items of a running order are paid as their own sale
+// (number = the order's number + -01, -02...); the order keeps the rest, and is closed when nothing is left.
+function splitPay(input) {
+  if (!current) throw new Error('Not signed in');
+  need('invoice', 'take payment for orders');
+  const parent = db.saleById(Number(input.saleId));
+  if (!parent || parent.sync_status !== 'running') throw new Error('This order is already closed');
+  const take = new Map((input.parts || []).filter((p) => Number(p.qty) > 0).map((p) => [Number(p.lineId), Number(p.qty)]));
+  if (!take.size) throw new Error('Pick at least one item for this bill');
+  const partLines = []; const restLines = [];
+  for (const l of parent.lines) {
+    const q = Math.min(Number(l.qty) || 0, take.get(l.id) || 0);
+    const disc = String(l.menu_discount_value || '');
+    const share = (n) => (disc && !disc.endsWith('%') && Number(l.qty) ? String(calc.round(calc.num(disc) * n / Number(l.qty), 2)) : disc);
+    const base = { food_menu_id: l.food_menu_id, menu_name: l.menu_name, menu_unit_price: l.menu_unit_price, menu_note: l.menu_note || '',
+      modifiers: (l.modifiers || []).map((m) => ({ id: m.id, name: m.name, price: m.price })), kitchen_id: l.kitchen_id, kitchen_name: l.kitchen_name };
+    const sent = Number(l.kot_qty) || 0;
+    if (q > 0) partLines.push({ ...base, qty: q, discount: share(q), kot_qty: Math.min(q, sent) });
+    if (Number(l.qty) - q > 0) restLines.push({ ...base, id: l.id, qty: Number(l.qty) - q, discount: share(Number(l.qty) - q), kot_qty: Math.max(0, sent - q) });
+  }
+  if (!partLines.length) throw new Error('Pick at least one item for this bill');
+  const n = db.db.prepare('SELECT COUNT(*) AS c FROM tbl_sales WHERE sale_no LIKE ?').get(parent.sale_no + '-%').c + 1;
+  const splitNo = parent.sale_no + '-' + String(n).padStart(2, '0');
+  const common = { orderType: parent.order_type, customerId: parent.customer_id, customerName: parent.customer_name, waiterId: parent.waiter_id, waiterName: parent.waiter_name };
+  const r = saveOrder({ ...common, action: 'pay', splitNo, tableName: parent.orders_table_text || '', lines: partLines, payments: input.payments, given: input.given });
+  const tbl = parent.tables && parent.tables[0];
+  if (restLines.length) {
+    const disc = parent.sub_total_discount_type === 'percentage' && parent.sub_total_discount_value && !String(parent.sub_total_discount_value).endsWith('%') ? parent.sub_total_discount_value + '%' : (parent.sub_total_discount_value || '');
+    const { header, detailRows, table } = buildSale({ ...common, tableId: tbl ? tbl.table_id : parent.table_id, tableName: parent.orders_table_text || '', persons: tbl ? tbl.persons : 1,
+      discount: disc, charge: Number(parent.delivery_charge) ? String(parent.delivery_charge) : '', tips: Number(parent.tips_amount) ? String(parent.tips_amount) : '', lines: restLines }, parent);
+    db.saveSale({ ...header, order_status: 1, sync_status: 'running', paid_amount: 0, due_amount: 0, kitchen_sync: 'pending', server_hash: null, kot_count: parent.kot_count }, detailRows, [], table);
+  } else {
+    db.closeSplitParent(parent.id);
+  }
+  log('split bill ' + splitNo + ' paid from ' + parent.sale_no + (restLines.length ? '' : ' (order fully paid)'));
+  send('running-changed', {});
+  kick();
+  return { ...r, parentNo: parent.sale_no, remaining: restLines.length };
+}
+
+// every printer the till uses, and what Windows says about it
+async function printerStatus() {
+  await printer.refreshStates().catch(() => {});
+  const c = store.cfg; const out = [];
+  const add = (role, dev) => out.push({ role, printer: dev || 'Windows default printer', problem: printer.problem(dev || '') });
+  add('Receipts and bills', c.receiptPrinter || '');
+  for (const k of db.all('tbl_kitchens', "del_status IS NULL OR del_status='Live'", 'name')) {
+    const mapped = c.kitchenPrinters && c.kitchenPrinters[String(k.id)];
+    for (const dev of printer.printersForKitchen(k.id)) out.push({ role: 'KOT · ' + k.name + (mapped ? '' : ' (default KOT printer)'), printer: dev || 'Windows default printer', problem: printer.problem(dev || '') });
+  }
+  return out;
+}
+
+// sales from every till, as the website has them, plus this till's sales that have not reached it yet
+async function webSales(f) {
+  const local = db.listSales({ from: f.from, to: f.to, status: 'pending', userId: f.userId || undefined });
+  let web = []; let error = '';
+  if (online && store.cfg.baseUrl) {
+    const r = await withAccount(current.userId, (acc) => server.salesList(acc, { user_id: f.userId || '', from_datetime: f.from || '', to_datetime: f.to || '', length: 2000 }))
+      .catch((e) => ({ state: 'error', text: e.message }));
+    if (r.state === 'ok' && r.json && Array.isArray(r.json.data)) web = r.json.data.map(parseWebSaleRow).filter(Boolean);
+    else error = r.text || 'The website did not send the sales list';
+  } else error = 'No internet: showing this computer only';
+  const seen = new Set(web.map((w) => w.sale_no));
+  const rows = [...local.filter((l) => !seen.has(l.sale_no)).map((l) => ({ sale_no: l.sale_no, date_time: l.date_time, type: l.order_type, customer: l.customer_name, total: l.total_payable, payments: '', user: l.user_name, where: 'This till, waiting to upload' })), ...web];
+  return { rows, error, at: Date.now() };
+}
+function parseWebSaleRow(a) {
+  if (!Array.isArray(a) || a.length < 9) return null;
+  const txt = (v) => String(v == null ? '' : v).replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+  const num = (v) => Number(txt(v).replace(/[^0-9.-]/g, '')) || 0;
+  return { sale_no: txt(a[1]), type: txt(a[2]), date_time: txt(a[3]), customer: txt(a[4]), total: num(a[5]), payments: txt(a[7]), user: txt(a[8]), where: 'Website' };
 }
 app.on('web-contents-created', (_e, wc) => { wc.on('will-prevent-unload', (ev) => ev.preventDefault()); });
 
@@ -896,6 +1011,7 @@ app.whenReady().then(() => {
   printer.onKot = (k) => db.saveKot({ ...k, userName: current ? current.name : '' });
   updater = new Updater({ app, getCfg: () => store.cfg, log, onState: (st) => { send('update', st); if (st.status === 'ready') setTimeout(autoInstall, 5000); } });
   updater.start();
+  resumeAfterUpdate();
   log('start ' + app.getVersion() + ' site=' + store.cfg.baseUrl + ' ' + JSON.stringify(db.syncCounts()));
   registerIpc();
   buildMenu();

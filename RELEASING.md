@@ -1,7 +1,7 @@
 # Publishing an update
 
 Every till with version 2.5.0 or newer checks
-`https://api.github.com/repos/DERRO12/rojey-desktop/releases/latest` about every 30 minutes. When it finds a newer version, it downloads that release's `RojeyPOS-Setup-<version>.exe`.
+`https://api.github.com/repos/DERRO12/rojey-desktop/releases/latest` about every 10 minutes. When it finds a newer version, it downloads that release's `RojeyPOS-Setup-<version>.exe`.
 
 1. Raise `version` in `package.json`, for example `2.5.1`.
 2. Build:

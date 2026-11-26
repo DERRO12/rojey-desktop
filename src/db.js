@@ -310,11 +310,18 @@ class Db {
 
   // ---- running orders shared with the website (tbl_kitchen_sales there) ---------------------
   kitchenPending(limit = 20) {
-    return this.db.prepare("SELECT id, sale_no, user_id, updated_at, kitchen_sync, sync_status FROM tbl_sales WHERE kitchen_sync IN ('pending','cancel') ORDER BY updated_at LIMIT ?").all(limit);
+    return this.db.prepare("SELECT id, sale_no, user_id, updated_at, kitchen_sync, sync_status FROM tbl_sales WHERE kitchen_sync IN ('pending','cancel','delete') ORDER BY updated_at LIMIT ?").all(limit);
+  }
+  // a running order whose items were all paid as split bills: closed here, and taken off the website
+  closeSplitParent(id) {
+    this.tx(() => {
+      this.db.prepare("UPDATE tbl_sales SET sync_status='cancelled', del_status='Split', kitchen_sync='delete', updated_at=? WHERE id=?").run(Date.now(), id);
+      this.db.prepare('DELETE FROM tbl_orders_table WHERE sale_id=?').run(id);
+    });
   }
   kitchenDone(id, updatedAt, state) {
     // server_hash is cleared: the website now holds this till's version, and the next pull adopts its hash
-    this.db.prepare('UPDATE tbl_sales SET kitchen_sync=?, kitchen_synced_at=?, server_hash=NULL WHERE id=? AND updated_at=?').run(state === 'cancel' ? null : 'done', Date.now(), id, updatedAt);
+    this.db.prepare('UPDATE tbl_sales SET kitchen_sync=?, kitchen_synced_at=?, server_hash=NULL WHERE id=? AND updated_at=?').run(state === 'cancel' || state === 'delete' ? null : 'done', Date.now(), id, updatedAt);
   }
   // the website's waiter list (users whose role is Waiter), the same as its POS shows
   waiters() {

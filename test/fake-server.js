@@ -153,6 +153,19 @@ function createFakeServer() {
       S.customers.set(id, { name: form.customer_name, phone: form.customer_phone, email: form.customer_email, address: form.customer_delivery_address });
       res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ customer_id: id, online_customer_id: '' }));
     }
+    if (p === 'Sale/setMergeDelete') {
+      S.mergeDeleted = S.mergeDeleted || []; S.mergeDeleted.push(form.sale_no); S.kitchen.delete(form.sale_no);
+      res.writeHead(200); return res.end('success');
+    }
+    if (p === 'Sale/getAjaxData') {
+      // the website's sales list: every till's paid sales, newest first, with its own filters
+      const from = (form.from_datetime || '').replace('T', ' '); const to = (form.to_datetime || '').replace('T', ' ');
+      const rows = [...S.sales.entries()].reverse().filter(([, v]) => (!Number(form.user_id) || Number(v.user_id) === Number(form.user_id))
+        && (!from || String(v.order.date_time) >= from) && (!to || String(v.order.date_time) <= to))
+        .map(([no, v], i) => { const u = S.users.find((x) => x.id === v.user_id) || {}; const t = String(v.order.date_time || '').split(' ');
+          return [i + 1, no, { 1: 'Dine In', 2: 'Take Away', 3: 'Delivery' }[v.order.order_type] || '', t[0] + ' ' + (t[1] || ''), v.order.customer_name || '', 'UGX ' + Number(v.order.total_payable).toLocaleString('en-US', { minimumFractionDigits: 2 }), '', 'Cash:' + v.order.total_payable, u.full_name || '', '<a>x</a>']; });
+      res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ draw: 1, recordsTotal: rows.length, recordsFiltered: rows.length, data: rows }));
+    }
     if (p === 'Sale/add_cancel_audit_report') {
       const o = JSON.parse(form.order); S.kitchen.delete(o.sale_no);
       res.writeHead(200); return res.end('');

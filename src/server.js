@@ -204,6 +204,19 @@ class Server {
     });
   }
 
+  // a running order that was fully paid as split bills: the website removes it (same call as its own POS)
+  async mergeDelete(key, saleNo) {
+    const r = await request(jar(key), this.url('Sale/setMergeDelete'), { method: 'POST', form: { sale_no: saleNo }, timeout: 20000, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (r.location) return { state: /Register/i.test(r.location) ? 'register' : 'login' };
+    if (isLoginPage({ body: r.body })) return { state: 'login' };
+    return { state: r.status === 200 ? 'ok' : 'error', text: 'HTTP ' + r.status };
+  }
+
+  // the website's sales list (every till), with its own filters: user_id, from_datetime, to_datetime
+  async salesList(key, f) {
+    return this.postJson(key, 'Sale/getAjaxData', { draw: '1', start: '0', length: String(f.length || 1000), user_id: String(f.user_id || ''), from_datetime: f.from_datetime || '', to_datetime: f.to_datetime || '', 'search[value]': '' }, 30000);
+  }
+
   async pullRunning(key, ownNos, allNos) {
     return this.postJson(key, 'Sale/get_all_running_order_for_new_pc', { sale_no_all: ownNos.join(','), sale_no_all_for_invoice: allNos.join(',') }, 20000);
   }

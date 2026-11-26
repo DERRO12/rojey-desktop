@@ -134,12 +134,12 @@ async function onPage(page, file) { return waitFor(async () => { try { return pa
   check('order is running', running.length === 1, running);
   const r1 = running[0];
   check('running order shared with website', await waitFor(async () => A.S.kitchen.has(r1.sale_no)));
-  const s1 = await call(page, 'pos:get', r1.id);
-  check('totals with 16% VAT on top', Math.abs(s1.total_payable - ((500 + 50) * 1.16 + 400 + 500)) < 0.01, s1.total_payable);
+  const sp1 = await call(page, 'pos:get', r1.id);
+  check('totals with 16% VAT on top', Math.abs(sp1.total_payable - ((500 + 50) * 1.16 + 400 + 500)) < 0.01, sp1.total_payable);
 
   console.log('reprint asks what to print');
   const b2 = prints().length;
-  const cappLine = s1.lines.find((l) => l.food_menu_id === 30);
+  const cappLine = sp1.lines.find((l) => l.food_menu_id === 30);
   const rp = await call(page, 'pos:reprintKot', r1.id, [cappLine.id]);
   const rpf = await waitFor(() => { const n = prints().slice(b2); return n.length >= 2 && n; });
   check('reprint only the chosen item, to both Cafe printers', rp.ok && rpf.length === 2 && rpf.every((f) => f.includes('kot-Cafe')) && /REPRINT/.test(fs.readFileSync(path.join(PRINT_DIR, rpf[0]), 'utf8')), rpf);
@@ -275,6 +275,34 @@ async function onPage(page, file) { return waitFor(async () => { try { return pa
   check('admin sees the update button with a green dot', await page.isVisible('#rj_update') && await waitFor(async () => page.isVisible('#rj_update_dot')));
   check('admin can install it with the button', (await call(page, 'update:install')).ok === true);
 
+  console.log('version 2.6: names, split bill, printers, sales of all tills');
+  const cat26 = await call(page, 'pos:catalog');
+  check('a size shows with its product name (Mojito Large)', cat26.items.some((i) => i.id === 21 && i.name === 'Mojito Large'), cat26.items.filter((i) => i.parent_id));
+  const sp = await call(page, 'pos:save', { action: 'kot', orderType: 2, waiterId: 8, waiterName: 'Waiter Ann', lines: [{ food_menu_id: 10, qty: 2 }, { food_menu_id: 21, qty: 1 }] });
+  check('order for splitting placed', sp.ok, sp);
+  const kotFiles = () => fs.readdirSync(PRINT_DIR).filter((f) => /kot/.test(f)).map((f) => fs.readFileSync(path.join(PRINT_DIR, f), 'utf8'));
+  check('the KOT prints the full name of a size', await waitFor(() => kotFiles().some((h) => h.includes(sp.saleNo) && h.includes('Mojito Large'))));
+  check('the website gets the order to split', await waitFor(() => A.S.kitchen.has(sp.saleNo), 10000));
+  const spS = await call(page, 'pos:get', sp.saleId);
+  const burger = spS.lines.find((l) => l.food_menu_id === 10); const mojito = spS.lines.find((l) => l.food_menu_id === 21);
+  const split1 = await call(page, 'pos:split', { saleId: sp.saleId, parts: [{ lineId: burger.id, qty: 1 }], payments: [{ payment_id: 1, payment_name: 'Cash', amount: 1000 }], given: 1000 });
+  check('first split bill paid with its own number (-01)', split1.ok && split1.saleNo === sp.saleNo + '-01' && split1.remaining > 0, split1);
+  const left = await call(page, 'pos:get', sp.saleId);
+  check('the order keeps the rest', left.sync_status === 'running' && left.lines.find((l) => l.food_menu_id === 10).qty === 1 && left.lines.some((l) => l.food_menu_id === 21));
+  check('no new KOT for items the kitchen already has', split1.kitchens.length === 0, split1.kitchens);
+  check('split bill reaches the website', await waitFor(() => A.S.sales.has(sp.saleNo + '-01'), 10000));
+  const split2 = await call(page, 'pos:split', { saleId: sp.saleId, parts: left.lines.map((l) => ({ lineId: l.id, qty: l.qty })), payments: [], given: 0 });
+  check('last split bill pays the rest', split2.ok && split2.saleNo === sp.saleNo + '-02' && split2.remaining === 0, split2);
+  check('the order is closed when nothing is left', !(await call(page, 'pos:running')).some((r) => r.sale_no === sp.saleNo));
+  check('the website removes the fully split order', await waitFor(() => (A.S.mergeDeleted || []).includes(sp.saleNo) && !A.S.kitchen.has(sp.saleNo), 10000));
+  check('both split bills are on the website', await waitFor(() => A.S.sales.has(sp.saleNo + '-02'), 10000));
+  const pst = await call(page, 'printers:status');
+  check('printer status lists the receipt printer and every kitchen', Array.isArray(pst) && pst.some((p) => /Receipts/.test(p.role)) && pst.some((p) => /Kitchen/.test(p.role)) && pst.some((p) => /Bar/.test(p.role)), pst);
+  const ws = await call(page, 'sales:web', {});
+  check('admin sees the sales of every till from the website', ws.rows && ws.rows.some((r) => r.sale_no === sp.saleNo + '-01' && r.where === 'Website'), ws);
+  check('sales of all tills can be filtered by person', (await call(page, 'sales:web', { userId: 5 })).rows.every((r) => r.user === 'Cashier Jane'));
+  check('the till knows when it is busy (no update in the middle of an order)', (await page.evaluate(() => window.__rjIdle())) === false);
+
   console.log('changes on the website arrive by themselves');
   A.S.items[1].price = '210.00';
   check('new price shows without doing anything', await waitFor(async () => /210\.00/.test(await page.textContent('#item_11')), 20000), await page.textContent('#item_11'));
@@ -408,7 +436,9 @@ async function onPage(page, file) { return waitFor(async () => { try { return pa
   console.log('sales screen and clean up');
   await call(page, 'nav', 'sales');
   await onPage(page, 'sales.html');
-  check('sales list shows rows', await waitFor(async () => (await page.$$('#tbl tr')).length > 3));
+  check('sales screen opens on the sales of all tills (website)', await waitFor(async () => (await page.$$('#tbl tr')).length >= 2 && /all tills/.test(await page.textContent('#title'))));
+  await page.selectOption('#src', 'local');
+  check('sales list of this computer shows rows', await waitFor(async () => (await page.$$('#tbl tr')).length > 3));
   await page.screenshot({ path: path.join(SHOTS, 'sales.png') });
   await page.fill('#fd', '2000-01-01'); await page.fill('#ft', '00:00'); await page.fill('#td', '2000-01-02'); await page.fill('#tt', '23:59');
   await page.click('#go');

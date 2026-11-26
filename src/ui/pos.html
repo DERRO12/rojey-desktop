@@ -22,6 +22,7 @@
         <ul class="icon__menu">
           <li><a href="#" id="rj_logout" class="header_menu_icon" title="Sign out"><i class="fas fa-sign-out-alt"></i></a></li>
           <li class="rj-admin"><a href="#" id="rj_sales" class="header_menu_icon" title="Sales on this computer (F3)"><i class="fal fa-list-alt"></i></a></li>
+          <li><a href="#" id="rj_printers" class="header_menu_icon" title="Printers"><i class="fal fa-print"></i><span class="rj-update-dot rj-bad-dot" id="rj_printers_dot"></span></a></li>
           <li class="rj-admin"><a href="#" id="rj_update" class="header_menu_icon" title="Updates"><i class="fal fa-arrow-circle-up"></i><span class="rj-update-dot" id="rj_update_dot"></span></a></li>
           <li class="rj-admin"><a href="#" id="rj_settings" class="header_menu_icon" title="Settings"><i class="fal fa-cog"></i></a></li>
           <li><a href="#" id="print_last_invoice" class="header_menu_icon" title="Print last invoice (F8)"><i class="fal fa-print"></i></a></li>
@@ -61,7 +62,8 @@
             <button class="operation_button" id="modify_order"><i class="fas fa-edit"></i> Modify Order</button>
             <button class="operation_button fix" id="single_order_details"><i class="fas fa-info-circle"></i> Order Details</button>
             <div class="ir_flex_jc_w94_pr">
-              <button class="operation_button fix print_kot_button" id="rj_kot"><i class="fas fa-print"></i> KOT</button>
+              <button class="ir_calc_w98 operation_button fix print_kot_button" id="rj_kot"><i class="fas fa-print"></i> KOT</button>
+              <button class="operation_button fix ir_calc_w98_m5" id="rj_split"><i class="fas fa-cut"></i> Split Bill</button>
             </div>
             <div class="ir_flex_jc_w94_pr margin_top_5">
               <button class="ir_calc_w98 operation_button fix" id="create_invoice_and_close">Invoice</button>

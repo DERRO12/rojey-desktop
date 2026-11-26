@@ -53,6 +53,17 @@ function posAccess(hid) {
   return any ? out : null;
 }
 
+// A size or variation is shown and printed with its product's name, as the website does ("Pizza Large", not "Large")
+function fullName(it, parent) {
+  const own = String(it.item_name || '').trim();
+  const tmp = stripTags(String(it.item_name_tmp || ''));
+  if (!parent) return own;
+  if (tmp && tmp.length > own.length) return tmp;
+  const pn = String(parent.item_name || '').trim();
+  if (!pn || own.toLowerCase().includes(pn.toLowerCase())) return own;
+  return (pn + ' ' + own).trim();
+}
+
 function stripTags(s) { return decodeEntities(String(s).replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim(); }
 
 function parsePosPage(html) {
@@ -84,7 +95,7 @@ function parsePosPage(html) {
     const parent = it.parent_id && it.parent_id !== '0' ? byId[it.parent_id] : null;
     const catId = itemCat[it.item_id] != null ? itemCat[it.item_id] : (parent && itemCat[parent.item_id] != null ? itemCat[parent.item_id] : null);
     return {
-      id: Number(it.item_id), code: it.item_code, name: it.item_name, alternative_name: it.alternative_name,
+      id: Number(it.item_id), code: it.item_code, name: fullName(it, parent), alternative_name: it.alternative_name,
       category_id: catId, sale_price: Number(it.price) || 0, sale_price_take_away: Number(it.price_take) || Number(it.price) || 0,
       sale_price_delivery: Number(it.price_delivery) || Number(it.price) || 0, tax_information: it.tax_information || '[]',
       veg_item: it.veg_item_status === 'yes' ? 'Veg Yes' : 'Veg No', beverage_item: it.beverage_item_status === 'yes' ? 'Beverage Yes' : 'Beverage No',
@@ -215,7 +226,7 @@ function mergeBootstrap(parsed, b) {
     t.tbl_food_menus = b.products.map((p, i) => {
       const pg = fromPage[p.id] || {};
       const kid = pg.kitchen_id || kitchenOfCat[p.category_id] || null;
-      return { ...p, sale_price: pg.sale_price != null ? pg.sale_price : p.sale_price, sale_price_take_away: pg.sale_price_take_away || p.sale_price_take_away || p.sale_price,
+      return { ...p, name: Number(p.parent_id || pg.parent_id) && pg.name ? pg.name : p.name, sale_price: pg.sale_price != null ? pg.sale_price : p.sale_price, sale_price_take_away: pg.sale_price_take_away || p.sale_price_take_away || p.sale_price,
         sale_price_delivery: pg.sale_price_delivery || p.sale_price_delivery || p.sale_price, photo: pg.photo || p.photo,
         kitchen_id: kid, kitchen_name: pg.kitchen_name || kName[kid] || '', is_variation: pg.is_variation || (p.is_variation ? 'Yes' : 'No'),
         category_id: p.category_id || pg.category_id, sort: pg.sort != null ? pg.sort : i };

@@ -1,4 +1,4 @@
-# Rojey POS 2.5: how to use
+# Rojey POS 2.6: how to use
 
 Rojey POS 2.5 is a till program for Windows. It has its own database, so it keeps working when there is no internet. It sends everything to your website (pos.rojeycreamery.com) by itself when the internet is back. Nothing on the website needs to change.
 
@@ -42,9 +42,9 @@ If a KOT, receipt, bill or test print fails, a red **Printing failed** box appea
 
 ## Updates
 
-New versions are published on GitHub (github.com/DERRO12/rojey-desktop, under *Releases*). Each till checks about every 30 minutes and downloads a new version in the background. The download is checked, so a broken download is never installed.
+New versions are published on GitHub (github.com/DERRO12/rojey-desktop, under *Releases*). Each till checks about every 10 minutes and downloads a new version in the background. The download is checked, so a broken download is never installed.
 
-- The update **installs by itself** when nobody is signed in on the till, or when the app is closed. The app opens again on its own. Orders, settings and sign-ins are kept.
+- The update **installs by itself**, no admin needed: at once when nobody is signed in, otherwise as soon as the till is idle (empty cart, no window open, nobody has touched it for a minute). The app opens again on its own and **the person who was signed in stays signed in**. Orders, settings and sign-ins are kept.
 - **Admins** also see an **update button** (arrow-up icon) at the top of the POS screen. It has a green dot when a new version is ready. Click it to install now, or to check for a new version.
 - To turn off automatic downloads, untick *Download new versions by themselves* in Settings > Updates.
 - The portable copy does not update itself. Use the Setup file on tills.
@@ -66,6 +66,27 @@ Taxes (VAT) are **off** by default, so bills and receipts show no tax lines.
 ## Who a sale belongs to
 
 The person who **invoices** a bill owns the sale, as on the website. When one person signs out and another signs in and invoices the open bills, those sales go to the person now signed in: in the reports here, on the website and on the printed receipt. The sale time is the invoice time, so it falls in that person's shift. The waiter and the items stay as they were.
+
+## Split bill
+
+Like the website: select a running order and press **Split Bill** (or open *Order Details* > *Split Bill*).
+
+1. Choose how many of each item go on this bill (**All** takes the whole line).
+2. Press **Pay this bill** and take the payment. The bill gets its own number (the order's number + -01, -02...) and its receipt prints.
+3. The rest stays on the order, and the split window opens again for the next bill.
+4. When nothing is left, the order closes, here and on the website.
+
+Items the kitchen already has are not sent to the kitchen again.
+
+## Sales of all tills (admin)
+
+The **Sales** screen opens on **All tills (website)**: every sale from every till and the website, with who sold it. Filter by **person**, and by **date and time to the minute** (24-hour). It refreshes by itself every 15 seconds. Sales on this till that have not reached the website yet show as *This till, waiting to upload*. Choose **This computer** to see only this till's sales (also offline).
+
+Running orders from every till show on the left for everyone, as before (the till also asks with a cashier sign-in saved on it, so sign in once as a cashier on each till).
+
+## Printer status
+
+After signing in, the till checks every printer it uses: the receipt printer and each kitchen's printers. If all are fine you see *Printers ready*; if one is off, unplugged, out of paper or missing, a window lists them. The **printer icon** at the top shows the list any time (a red dot means a problem). Kitchens come from the website's settings: a kitchen added there appears here by itself and uses the default KOT printer until you pick one in Settings.
 
 ## Giving an order to someone else
 
@@ -133,6 +154,8 @@ How to use it:
 Running orders on the left are listed **newest first**. Each one shows its order number, table, order type, customer, waiter, time and total. An order placed in the last two minutes has a green mark.
 
 ## Permissions (same as the website)
+
+Changes an admin makes to a role on the website reach the till within about 2 minutes, without signing out or reinstalling.
 
 Each person gets the POS permissions of their role on the website. The website's role names for them are:
 

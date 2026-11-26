@@ -58,7 +58,7 @@
     document.body.classList.toggle('rj-waiter', !!p.waiter);
     const hide = (sel, on) => $$(sel).forEach((e) => { e.style.display = on ? 'none' : ''; });
     // waiters: like the website, payment, printing and cancelling are hidden
-    hide('#direct_invoice, #rj_bill_now, #rj_kot, #create_invoice_and_close, #create_bill_and_close, #cancel_order_button, #print_last_invoice', !!p.waiter);
+    hide('#direct_invoice, #rj_bill_now, #rj_kot, #rj_split, #create_invoice_and_close, #create_bill_and_close, #cancel_order_button, #print_last_invoice', !!p.waiter);
     hide('.main_top .selected__btn_c', p.orderType === false);
     hide('#rj_order_options', p.discount === false && p.charge === false && p.tips === false);
     $('#select_waiter').disabled = p.chooseWaiter === false;
@@ -671,15 +671,17 @@
     newOrder(); loadRunning();
   }
 
-  function payModal(onDone) {
-    readControls();
-    if (!order.lines.length) { toast('Add at least one item', 'error'); return; }
-    const t = totals();
+  function payModal(onDone, opt) {
+    if (!opt) {
+      readControls();
+      if (!order.lines.length) { toast('Add at least one item', 'error'); return; }
+    }
+    const t = opt ? opt.totals : totals();
     const pms = cat.paymentMethods.length ? cat.paymentMethods : [{ id: 1, name: 'Cash' }];
     let method = pms.find((p) => String(p.id) === String(S.defaultPayment)) || pms[0];
     const rows = [];
     const m = modal({
-      title: 'Finalize Sale', wide: true, cls: 'rj-pay',
+      title: opt && opt.title ? opt.title : 'Finalize Sale', wide: true, cls: 'rj-pay',
       body: `<div class="rj-pay-top"><div>Total Payable</div><div class="rj-big" id="rj_p_total">${money(t.payable)}</div></div>
         <div class="rj-pay-cols"><div><div class="rj-pay-methods">${pms.map((p) => `<button class="rj-pm ${p.id === method.id ? 'rj-on' : ''}" data-id="${p.id}">${esc(p.name)}</button>`).join('')}</div></div>
         <div><label class="rj-field">Amount <input type="number" step="any" id="rj_p_amount" value="${fx(t.payable)}"></label>
@@ -694,8 +696,8 @@
           if (!pays.length) pays = [{ payment_id: method.id, payment_name: method.name, amount: C.num($('#rj_p_amount', el).value) || t.payable }];
           const given = C.num($('#rj_p_given', el).value) || pays.reduce((a, p) => a + p.amount, 0);
           close();
-          const r = await save('pay', pays, given);
-          if (r) onDone(r);
+          const r = opt ? await opt.submit(pays, given) : await save('pay', pays, given);
+          if (r && onDone) onDone(r);
         } },
       ],
     });
@@ -720,6 +722,74 @@
     $('#rj_p_amount', el).addEventListener('input', upd);
     upd();
   }
+
+  // ------------------------------------------------------------------ split bill (like the website)
+  async function splitBill(id) {
+    if (!allowed('invoice')) return;
+    const s = await api.call('pos:get', id);
+    if (!s || s.ok === false || s.sync_status !== 'running') { toast('This order is already closed', 'error'); loadRunning(); return; }
+    const lineOf = new Map(s.lines.map((l) => [l.id, l]));
+    const m = modal({
+      title: 'Split Bill · ' + s.sale_no, wide: true,
+      body: `<p class="rj-muted">Choose how many of each item go on this bill. It is paid and printed on its own; the rest stays on the order for the next bill.</p>
+        <table class="rj-table rj-split"><tr><th>Item</th><th>On the order</th><th>This bill</th><th class="r">Amount</th></tr>
+        ${s.lines.map((l) => `<tr data-line="${l.id}"><td>${esc(l.menu_name)}${l.modifiers.length ? '<br><small>' + l.modifiers.map((x) => esc(x.name)).join(', ') + '</small>' : ''}</td>
+          <td>${l.qty}</td><td><div class="rj-qty"><button type="button" data-d="-1">−</button><input type="number" min="0" max="${l.qty}" step="1" value="0"><button type="button" data-d="1">+</button><button type="button" data-all="1" class="rj-all">All</button></div></td>
+          <td class="r" data-amt>0</td></tr>`).join('')}</table>
+        <div class="rj-pay-line">This bill: <b id="rj_split_total">0</b> &nbsp; Left on the order: <b id="rj_split_left">${money(s.total_payable)}</b></div>`,
+      buttons: [{ text: 'Cancel', cls: 'rj-grey' }, { text: 'Pay this bill', cls: 'rj-primary', onClick: (close, el) => {
+        const parts = $$('tr[data-line]', el).map((tr) => ({ lineId: Number(tr.dataset.line), qty: Number($('input', tr).value) || 0 })).filter((p) => p.qty > 0);
+        if (!parts.length) return toast('Choose at least one item for this bill', 'error');
+        const t = partTotals(parts);
+        close();
+        payModal(null, { title: 'Split Bill · ' + s.sale_no, totals: t, submit: async (pays, given) => {
+          const r = await api.call('pos:split', { saleId: id, parts, payments: pays, given });
+          if (!r || r.ok === false) { toast((r && r.error) || 'Could not save', 'error', 5000); return null; }
+          toast(`Bill ${r.saleNo} paid${r.remaining ? '. The rest stays on ' + r.parentNo : '. Order ' + r.parentNo + ' is fully paid'}`);
+          await loadRunning();
+          if (r.remaining) splitBill(id); else if (selectedRunning === id) { selectedRunning = null; renderRunning(); }
+          return r;
+        } });
+      } }],
+    });
+    const partTotals = (parts) => C.totals({ lines: parts.map((p) => { const l = lineOf.get(p.lineId);
+      const disc = String(l.menu_discount_value || ''); const share = disc && !disc.endsWith('%') && l.qty ? String(C.num(disc) * p.qty / l.qty) : disc;
+      return { qty: p.qty, menu_unit_price: l.menu_unit_price, modifiers: l.modifiers, discount: share, tax_information: (itemsById.get(l.food_menu_id) || {}).tax_information || l.menu_taxes }; }) }, S);
+    const upd = () => {
+      const parts = $$('tr[data-line]', m.el).map((tr) => ({ lineId: Number(tr.dataset.line), qty: Math.max(0, Math.min(Number($('input', tr).max), Number($('input', tr).value) || 0)) }));
+      parts.forEach((p) => { const tr = $(`tr[data-line="${p.lineId}"]`, m.el); $('[data-amt]', tr).textContent = p.qty ? fx(partTotals([p]).payable) : '0'; });
+      const t = partTotals(parts.filter((p) => p.qty > 0));
+      $('#rj_split_total', m.el).textContent = money(t.payable);
+      $('#rj_split_left', m.el).textContent = money(Math.max(0, C.num(s.total_payable) - t.payable));
+    };
+    m.el.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-d], button[data-all]'); if (!b) return;
+      const inp = $('input', b.closest('tr'));
+      inp.value = b.dataset.all ? inp.max : Math.max(0, Math.min(Number(inp.max), (Number(inp.value) || 0) + Number(b.dataset.d)));
+      upd();
+    });
+    m.el.addEventListener('input', upd);
+  }
+
+  // ------------------------------------------------------------------ printers (shown after signing in)
+  async function printersPanel(auto) {
+    const list = await api.call('printers:status');
+    if (!Array.isArray(list)) return;
+    const bad = list.filter((p) => p.problem);
+    $('#rj_printers_dot').style.display = bad.length ? 'block' : 'none';
+    if (auto === 'quiet') return;
+    if (auto && !bad.length) { toast(`Printers ready: ${list.length}`, 'success', 2500); return; }
+    modal({ title: 'Printers', wide: true,
+      body: `<table class="rj-table rj-printers"><tr><th>Used for</th><th>Printer</th><th>Status</th></tr>
+        ${list.map((p) => `<tr><td>${esc(p.role)}</td><td>${esc(p.printer)}</td><td>${p.problem ? `<span class="rj-badge failed">${esc(p.problem)}</span>` : '<span class="rj-badge synced">Ready</span>'}</td></tr>`).join('')}</table>
+        <p class="rj-muted">Kitchens come from the website's settings. Pick each kitchen's printer in Settings. A printer that is switched off, unplugged or out of paper shows here.</p>`,
+      buttons: [{ text: 'Check again', cls: 'rj-blue', onClick: (c) => { c(); printersPanel(false); } }, { text: 'OK', cls: 'rj-primary' }] });
+  }
+
+  // the update installs by itself only when the till is idle: nothing in the cart, no window open, untouched for a minute
+  let lastTouch = Date.now();
+  ['mousedown', 'keydown', 'touchstart', 'wheel'].forEach((ev) => document.addEventListener(ev, () => { lastTouch = Date.now(); }, true));
+  window.__rjIdle = () => !!order && !order.lines.length && !order.saleId && !document.querySelector('.rj-overlay') && Date.now() - lastTouch > 60000;
 
   function afterPaid(r) {
     toast(`Sale ${r.saleNo} done${r.kitchens.length ? ' · KOT to ' + r.kitchens.join(', ') : ''}`);
@@ -770,6 +840,7 @@
       <p class="rj-muted">Customer: ${esc(s.customer_name)} · Waiter: ${esc(s.waiter_name || '-')} · Table: ${esc(tableOf(s) || '-')} · ${esc(s.date_time)} · by ${esc(s.user_name)}</p>`,
     buttons: [
       { text: 'Modify Order', cls: 'rj-blue', onClick: (c) => { c(); modifyOrder(id); } },
+      ...(P().waiter ? [] : [{ text: 'Split Bill', cls: 'rj-grey', onClick: (c) => { c(); splitBill(id); } }]),
       ...(P().waiter ? [] : [{ text: 'Assign to…', cls: 'rj-grey', onClick: (c) => { c(); assignOrders([id], s); } }]),
       ...(P().waiter ? [] : [{ text: 'Invoice', cls: 'rj-green', onClick: (c) => { c(); invoiceOrder(id); } }]),
       { text: 'Close', cls: 'rj-primary' },
@@ -858,11 +929,13 @@
     $('#modify_order').addEventListener('click', () => { const id = selectedOrThrow(); if (id) modifyOrder(id); });
     $('#single_order_details').addEventListener('click', orderDetails);
     $('#rj_kot').addEventListener('click', () => { if (allowed('kot')) reprintKot(); });
+    $('#rj_split').addEventListener('click', () => { const id = selectedOrThrow(); if (id) splitBill(id); });
+    $('#rj_printers').addEventListener('click', (e) => { e.preventDefault(); printersPanel(false); });
     $('#create_invoice_and_close').addEventListener('click', () => { const id = selectedOrThrow(); if (id) invoiceOrder(id); });
     $('#create_bill_and_close').addEventListener('click', () => { const id = selectedOrThrow(); if (id) billOrder(id); });
     $('#cancel_order_button').addEventListener('click', () => { const id = selectedOrThrow(); if (id) cancelOrder(id); });
 
-    $('#rj_logout').addEventListener('click', async (e) => { e.preventDefault(); await api.call('auth:logout'); });
+    $('#rj_logout').addEventListener('click', async (e) => { e.preventDefault(); try { sessionStorage.clear(); } catch { /* */ } await api.call('auth:logout'); });
     $('#rj_sales').addEventListener('click', (e) => { e.preventDefault(); api.call('nav', 'sales'); });
     $('#rj_settings').addEventListener('click', async (e) => { e.preventDefault(); const r = await api.call('nav', 'setup'); if (r.ok === false) toast(r.error, 'error'); });
     $('#rj_fullscreen').addEventListener('click', (e) => { e.preventDefault(); api.call('app:fullscreen'); });
@@ -896,5 +969,7 @@
     await loadRunning();
     showStatus(await api.call('status'));
     $('#search').focus();
+    // printer check once per sign-in
+    try { const k = 'rj_printers_' + (user && user.userId); if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, '1'); printersPanel(true); } else printersPanel('quiet'); } catch { printersPanel(true); }
   })();
 })();
